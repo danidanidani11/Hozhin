@@ -10,6 +10,7 @@ from telegram.ext import (
 from flask import Flask, request
 import os
 import json
+import asyncio
 
 # تنظیمات Flask
 app = Flask(__name__)
@@ -199,12 +200,12 @@ async def handle_pdf_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def home():
     return "بات در حال اجرا است!"
 
-# مسیر وب‌هوک (غیر async)
+# مسیر وب‌هوک
 @app.route('/webhook', methods=['POST'])
 def webhook():
     global application
     update = Update.de_json(json.loads(request.get_data(as_text=True)), application.bot)
-    application.run_async(application.process_update(update))
+    asyncio.run(application.process_update(update))
     return '', 200
 
 async def main():
@@ -226,6 +227,7 @@ async def main():
     await application.bot.set_webhook(url=webhook_url)
 
 if __name__ == '__main__':
-    import asyncio
-    asyncio.run(main())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(main())
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
