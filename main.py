@@ -205,7 +205,11 @@ def home():
 def webhook():
     global application
     update = Update.de_json(json.loads(request.get_data(as_text=True)), application.bot)
-    asyncio.run(application.process_update(update))
+    # اجرای ناهمزمان برای پردازش آپدیت‌ها
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(application.process_update(update))
+    loop.close()
     return '', 200
 
 async def main():
