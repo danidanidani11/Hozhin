@@ -1,4 +1,4 @@
-Flask==2.2.5
-werkzeug==2.3.0
-python-telegram-bot==13.15
+Flask
 gunicorn
+python-telegram-bot==13.15
+werkzeug==2.3.0
