@@ -6,7 +6,7 @@ import logging
 import time
 from threading import Thread
 
-# تنظیمات پایه
+# تنظیمات لاگ
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -22,7 +22,7 @@ CHANNEL = os.getenv('CHANNEL', 'fromheartsoul')
 CARD_NUMBER = os.getenv('CARD_NUMBER', '5859 8311 3314 0268')
 BOOK_PRICE = os.getenv('BOOK_PRICE', '110 هزارتومان')
 PORT = int(os.getenv('PORT', 10000))
-WEBHOOK_URL = os.getenv('WEBHOOK_URL', f'https://hozhin.onrender.com/webhook')
+WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://hozhin.onrender.com/webhook')
 
 # ایجاد ربات
 bot = telebot.TeleBot(TOKEN, parse_mode='HTML')
@@ -292,7 +292,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=PORT)
 
 def run_bot():
-    if os.getenv('RENDER'):
+    if os.getenv('ENV') == 'production':
         logger.info('حالت تولید: استفاده از وب‌هک')
         bot.remove_webhook()
         time.sleep(1)
