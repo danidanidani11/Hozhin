@@ -3,6 +3,7 @@ import telebot
 from telebot import types
 import os
 import logging
+import time
 
 # تنظیمات لاگ
 logging.basicConfig(level=logging.INFO)
