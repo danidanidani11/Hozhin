@@ -1,46 +1,57 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import telebot
 from telebot import types
 import os
+import logging
+
+# تنظیمات لاگ
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# تنظیمات
+# تنظیمات ربات
 TOKEN = os.getenv('TOKEN', '7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0')
 ADMIN_ID = int(os.getenv('ADMIN_ID', '5542927340'))
 CHANNEL = os.getenv('CHANNEL', 'fromheartsoul')
 CARD_NUMBER = os.getenv('CARD_NUMBER', '5859 8311 3314 0268')
 BOOK_PRICE = os.getenv('BOOK_PRICE', '110 هزارتومان')
+PORT = int(os.getenv('PORT', 5000))
 
 bot = telebot.TeleBot(TOKEN)
 
-# ذخیره اطلاعات
+# دیکشنری‌های ذخیره اطلاعات
 user_payments = {}
 user_messages = {}
 
-# صفحه اصلی Flask
+# صفحه اصلی
 @app.route('/')
 def home():
-    return "ربات فروش کتاب هوژین و حرمان فعال است!"
+    return jsonify({
+        "status": "active",
+        "bot": "کتاب هوژین و حرمان",
+        "version": "1.0"
+    })
 
-# وب‌هک برای تلگرام
+# وب‌هک تلگرام
 @app.route('/webhook', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
-        json_update = request.stream.read().decode('utf-8')
-        update = types.Update.de_json(json_update)
+        json_data = request.get_json()
+        update = types.Update.de_json(json_data)
         bot.process_new_updates([update])
         return '', 200
     return '', 403
 
-# بررسی عضویت در کانال
+# --- توابع کمکی ---
 def is_member(user_id):
     try:
-        return bot.get_chat_member(f"@{CHANNEL}", user_id).status in ['member', 'administrator', 'creator']
-    except:
+        member = bot.get_chat_member(f"@{CHANNEL}", user_id)
+        return member.status in ['member', 'administrator', 'creator']
+    except Exception as e:
+        logger.error(f"Error checking membership: {e}")
         return False
 
-# منوی اصلی
 def show_menu(chat_id):
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     buttons = [
@@ -48,61 +59,67 @@ def show_menu(chat_id):
         types.KeyboardButton('💬 انتقادات و پیشنهادات'),
         types.KeyboardButton('📖 درباره کتاب'),
         types.KeyboardButton('✍️ درباره نویسنده'),
-        types.KeyboardButton('🎧 کتاب صوتی (به زودی)')
+        types.KeyboardButton('🎧 کتاب صوتی')
     ]
     markup.add(*buttons)
     bot.send_message(chat_id, "منوی اصلی:", reply_markup=markup)
 
-# دستور /start
+# --- دستورات ربات ---
 @bot.message_handler(commands=['start'])
 def start(message):
     if is_member(message.from_user.id):
         show_menu(message.chat.id)
     else:
-        bot.send_message(message.chat.id, f"⚠️ برای استفاده از ربات، لطفا در کانال ما عضو شوید:\n@{CHANNEL}\nسپس /start را مجددا ارسال کنید.")
+        bot.send_message(
+            message.chat.id,
+            f"سلام! برای استفاده از ربات، لطفاً در کانال ما عضو شوید:\n@{CHANNEL}\nسپس /start را مجدداً ارسال کنید."
+        )
 
-# پردازش پیام‌ها
-@bot.message_handler(func=lambda m: True)
-def handle_messages(message):
-    if not is_member(message.from_user.id):
-        bot.send_message(message.chat.id, f"⚠️ لطفا ابتدا در کانال ما عضو شوید:\n@{CHANNEL}")
-        return
-    
-    text = message.text
-    
-    if text == '📕 خرید کتاب':
-        send_payment_info(message.chat.id)
-    elif text == '💬 انتقادات و پیشنهادات':
-        request_feedback(message.chat.id)
-    elif text == '📖 درباره کتاب':
-        send_book_info(message.chat.id)
-    elif text == '✍️ درباره نویسنده':
-        send_author_info(message.chat.id)
-    elif text == '🎧 کتاب صوتی (به زودی)':
-        bot.send_message(message.chat.id, "این بخش به زودی فعال خواهد شد.")
-
-# اطلاعات پرداخت
-def send_payment_info(chat_id):
+@bot.message_handler(func=lambda m: m.text == '📕 خرید کتاب')
+def handle_purchase(message):
     msg = f"""
 💳 اطلاعات پرداخت:
-شماره کارت: <code>{CARD_NUMBER}</code>
-مبلغ: {BOOK_PRICE}
+<code>شماره کارت: {CARD_NUMBER}</code>
+💰 مبلغ: {BOOK_PRICE}
 
 پس از واریز، فیش پرداخت (عکس یا متن) را ارسال کنید.
 """
-    bot.send_message(chat_id, msg, parse_mode='HTML')
+    bot.send_message(message.chat.id, msg, parse_mode='HTML')
 
-# دریافت فیش پرداخت
+@bot.message_handler(func=lambda m: m.text == '📖 درباره کتاب')
+def handle_about_book(message):
+    text = """
+📚 رمان هوژین و حرمان:
+روایتی عاشقانه با تلفیق سبک‌های سورئالیسم، رئالیسم و روان‌شناختی.
+
+🔹 هوژین: واژه‌ای کردی به معنای "نور زندگی"
+🔹 حرمان: نماد اندوه و افسردگی عمیق
+
+📖 روش مطالعه پیشنهادی:
+- بار اول: بخش ۱ → ۲ → ۳
+- بار دوم: بخش ۲ → ۱ → ۳
+(برای دریافت دو برداشت متفاوت)
+"""
+    bot.send_message(message.chat.id, text)
+
+# --- پردازش پرداخت‌ها ---
 @bot.message_handler(content_types=['photo', 'document', 'text'])
 def handle_payment(message):
     if message.content_type == 'text' and message.text.startswith(('📕', '💬', '📖', '✍️', '🎧')):
         return
     
     user_id = message.from_user.id
+    proof = None
+    
+    if message.photo:
+        proof = message.photo[-1].file_id
+    elif message.document:
+        proof = message.document.file_id
+    else:
+        proof = message.text
+    
     user_payments[user_id] = {
-        'proof': message.photo[-1].file_id if message.photo else (
-            message.document.file_id if message.document else message.text
-        ),
+        'proof': proof,
         'type': message.content_type,
         'status': 'pending'
     }
@@ -115,101 +132,41 @@ def handle_payment(message):
     )
     
     if message.photo:
-        bot.send_photo(ADMIN_ID, user_payments[user_id]['proof'], 
-                      caption=f"فیش پرداخت از کاربر {user_id}", reply_markup=markup)
+        bot.send_photo(ADMIN_ID, proof, caption=f"فیش پرداخت از کاربر {user_id}", reply_markup=markup)
     elif message.document:
-        bot.send_document(ADMIN_ID, user_payments[user_id]['proof'],
-                         caption=f"فیش پرداخت از کاربر {user_id}", reply_markup=markup)
+        bot.send_document(ADMIN_ID, proof, caption=f"فیش پرداخت از کاربر {user_id}", reply_markup=markup)
     else:
         bot.send_message(ADMIN_ID, f"فیش متنی از کاربر {user_id}:\n\n{message.text}", reply_markup=markup)
     
-    bot.send_message(user_id, "فیش شما برای تایید ارسال شد. لطفا صبر کنید.")
+    bot.send_message(user_id, "✅ فیش پرداخت شما دریافت شد و در حال بررسی است.")
 
-# درباره کتاب
-def send_book_info(chat_id):
-    text = """
-📚 رمان هوژین و حرمان:
-روایتی عاشقانه با تلفیق سبک‌های سورئالیسم، رئالیسم و روان
-
-🔸 هوژین: واژه‌ای کردی به معنای نور زندگی
-🔸 حرمان: نماد اندوه و افسردگی
-
-📖 روش مطالعه:
-- بار اول: بخش ۱ → ۲ → ۳
-- بار دوم: بخش ۲ → ۱ → ۳
-(برای دریافت دو برداشت متفاوت)
-
-📜 نکات:
-- برخی بخش‌ها واقعی هستند
-- اشعار از شاعران ایرانی انتخاب شده‌اند
-- مطالب داخل «» از نامه‌ها یا بیت‌های کوتاه الهام گرفته شده‌اند
-"""
-    bot.send_message(chat_id, text)
-
-# درباره نویسنده
-def send_author_info(chat_id):
-    text = """
-سلام رفقا! 🙋🏻‍♂
-مانی محمودی، نویسنده کتاب هوژین و حرمان.
-
-🔹 شروع نویسندگی از ۱۳ سالگی
-🔹 اولین اثر: هوژین و حرمان
-🔹 در حال نوشتن آثار جدید
-
-امیدوارم از کتاب لذت ببرید! 😊❤️
-"""
-    bot.send_message(chat_id, text)
-
-# انتقادات و پیشنهادات
-def request_feedback(chat_id):
-    msg = bot.send_message(chat_id, """
-💬 انتقادات و پیشنهادات:
-لطفا نظر خود را ارسال کنید.
-
-نظرات شما خوانده شده و ارزشمند خواهد بود. ☺️
-""")
-    bot.register_next_step_handler(msg, process_feedback)
-
-def process_feedback(message):
-    user_id = message.from_user.id
-    user_messages[user_id] = message.text
-    
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("✍️ پاسخ", callback_data=f"reply_{user_id}"))
-    
-    bot.send_message(ADMIN_ID, f"پیام جدید از کاربر {user_id}:\n\n{message.text}", reply_markup=markup)
-    bot.send_message(user_id, "پیام شما ثبت شد. سپاس!")
-
-# پردازش کلیک‌های اینلاین
+# --- مدیریت کال‌بک‌ها ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callbacks(call):
-    action, user_id = call.data.split('_')
-    user_id = int(user_id)
-    
-    if action == 'approve':
-        bot.send_message(ADMIN_ID, f"پرداخت کاربر {user_id} تایید شد.")
-        bot.send_message(user_id, "✅ پرداخت شما تایید شد. کتاب به زودی ارسال می‌شود.")
-        # ارسال فایل کتاب:
-        # bot.send_document(user_id, open('book.pdf', 'rb'))
-        del user_payments[user_id]
+    try:
+        action, user_id = call.data.split('_')
+        user_id = int(user_id)
         
-    elif action == 'reject':
-        bot.send_message(ADMIN_ID, f"پرداخت کاربر {user_id} رد شد.")
-        bot.send_message(user_id, "❌ پرداخت شما تایید نشد. لطفا مجددا تلاش کنید.")
-        del user_payments[user_id]
-        
-    elif action == 'reply':
-        msg = bot.send_message(ADMIN_ID, "پاسخ خود را وارد کنید:")
-        bot.register_next_step_handler(msg, lambda m: send_reply(m, user_id))
+        if action == 'approve':
+            bot.send_message(user_id, "✅ پرداخت شما تأیید شد. لینک دانلود کتاب:\n[لینک دانلود]")
+            bot.send_message(ADMIN_ID, f"پرداخت کاربر {user_id} تأیید شد.")
+            user_payments.pop(user_id, None)
+            
+        elif action == 'reject':
+            bot.send_message(user_id, "❌ پرداخت شما تأیید نشد. لطفاً با پشتیبانی تماس بگیرید.")
+            bot.send_message(ADMIN_ID, f"پرداخت کاربر {user_id} رد شد.")
+            user_payments.pop(user_id, None)
+            
+    except Exception as e:
+        logger.error(f"Error in callback: {e}")
 
-def send_reply(message, user_id):
-    bot.send_message(user_id, f"📩 پاسخ ادمین:\n\n{message.text}")
-    bot.send_message(ADMIN_ID, "✅ پاسخ ارسال شد.")
-
-# تنظیم وب‌هک
+# --- راه‌اندازی ربات ---
 if __name__ == '__main__':
-    if os.getenv('ENV') == 'production':
+    if os.getenv('RENDER'):
+        logger.info("Running in production mode")
         bot.remove_webhook()
-        bot.set_webhook(url='https://hozhin.onrender.com/webhook')
+        time.sleep(1)
+        bot.set_webhook(url=f"https://hozhin.onrender.com/webhook")
     else:
+        logger.info("Running in development mode")
         bot.polling()
