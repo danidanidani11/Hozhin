@@ -7,9 +7,10 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from flask import Flask
+from flask import Flask, request
 import os
 import asyncio
+import json
 
 # تنظیمات Flask
 app = Flask(__name__)
@@ -196,7 +197,15 @@ async def handle_pdf_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def home():
     return "بات در حال اجرا است!"
 
+# مسیر وب‌هوک
+@app.route('/webhook', methods=['POST'])
+async def webhook():
+    update = Update.de_json(json.loads(request.get_data(as_text=True)), application.bot)
+    await application.process_update(update)
+    return '', 200
+
 async def main():
+    global application
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
@@ -208,7 +217,12 @@ async def main():
 
     await application.initialize()
     await application.start()
-    await application.updater.start_polling()
+    # پولینگ غیرفعال می‌شود
+    # await application.updater.start_polling()
+
+    # تنظیم وب‌هوک
+    webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'your-app-name.onrender.com')}/webhook"
+    await application.bot.set_webhook(url=webhook_url)
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
