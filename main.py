@@ -9,7 +9,6 @@ from telegram.ext import (
 )
 from flask import Flask, request
 import os
-import asyncio
 import json
 
 # تنظیمات Flask
@@ -22,6 +21,9 @@ CHANNEL_USERNAME = "@fromheartsoul"
 
 # متغیر برای ذخیره فیش‌های ارسالی
 pending_receipts = {}
+
+# متغیر سراسری برای Application
+application = None
 
 # بررسی عضویت در کانال
 async def check_channel_membership(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
@@ -197,11 +199,12 @@ async def handle_pdf_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def home():
     return "بات در حال اجرا است!"
 
-# مسیر وب‌هوک
+# مسیر وب‌هوک (غیر async)
 @app.route('/webhook', methods=['POST'])
-async def webhook():
+def webhook():
+    global application
     update = Update.de_json(json.loads(request.get_data(as_text=True)), application.bot)
-    await application.process_update(update)
+    application.run_async(application.process_update(update))
     return '', 200
 
 async def main():
@@ -217,14 +220,12 @@ async def main():
 
     await application.initialize()
     await application.start()
-    # پولینگ غیرفعال می‌شود
-    # await application.updater.start_polling()
 
     # تنظیم وب‌هوک
-    webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'your-app-name.onrender.com')}/webhook"
+    webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'hozhin.onrender.com')}/webhook"
     await application.bot.set_webhook(url=webhook_url)
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    loop.create_task(main())
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    import asyncio
+    asyncio.run(main())
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
