@@ -1,5 +1,3 @@
-import eventlet
-eventlet.monkey_patch()
 from flask import Flask, request
 import telegram
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
