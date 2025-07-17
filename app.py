@@ -300,6 +300,6 @@ if __name__ == '__main__':
         listen="0.0.0.0",
         port=PORT,
         url_path=BOT_TOKEN,
-        webhook_url=f"https://your-app-name.herokuapp.com/{BOT_TOKEN}"
+        webhook_url=f"https://hozhin.onrender.com/{BOT_TOKEN}"
     )
     app.run(host='0.0.0.0', port=PORT)
