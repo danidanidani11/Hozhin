@@ -222,8 +222,9 @@ def run_app():
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_|reject_)"))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    import threading
-    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
+    # فقط اجرای Flask برای Webhook
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    
 
 if __name__ == "__main__":
     run_app()
