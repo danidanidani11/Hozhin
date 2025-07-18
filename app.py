@@ -1,5 +1,6 @@
 import os
 import asyncio
+from threading import Thread
 from flask import Flask, request, abort
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import (
@@ -8,17 +9,18 @@ from telegram.ext import (
 )
 
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
-ADMIN_ID = 5542927340  # ایدی ادمین خودت
-CHANNEL_USERNAME = "fromheartsoul"  # Fixed: Removed invisible characters
+ADMIN_ID = 5542927340
+CHANNEL_USERNAME = "fromheartsoul"
 
 app = Flask(__name__)
 
+# دیکشنری برای ذخیره اطلاعات پرداخت
 users_payment = {}
 user_waiting_for_receipt = set()
 
-ABOUT_BOOK_TEXT = """رمان هوژین و حرمان روایتی عاشقانه است..."""  # (Your full text here)
-ABOUT_AUTHOR_TEXT = """سلام رفقا 🙋🏻‍♂
-مانی محمودی هستم نویسنده کتاب هوژین حرمان..."""  # (Your full text here)
+# متن های اطلاعاتی
+ABOUT_BOOK_TEXT = """رمان هوژین و حرمان..."""  # متن کامل شما
+ABOUT_AUTHOR_TEXT = """سلام رفقا 🙋🏻‍♂..."""  # متن کامل شما
 AUDIOBOOK_TEXT = "این بخش به زودی فعال میشود."
 
 def main_menu_keyboard():
@@ -30,25 +32,6 @@ def main_menu_keyboard():
         [InlineKeyboardButton("کتاب صوتی", callback_data="audiobook")],
     ]
     return InlineKeyboardMarkup(keyboard)
-
-# Global variables for bot application
-application = None
-loop = None
-
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    if request.method == "POST":
-        data = request.get_json(force=True)
-        update = Update.de_json(data, application.bot)
-        
-        # Create a new task for processing the update
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        )
-        return "ok"
-    else:
-        abort(405)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -65,8 +48,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        f"سلام {user.first_name} 👋\n"
-        "به ربات کتاب خوش آمدید.",
+        f"سلام {user.first_name} 👋\nبه ربات کتاب خوش آمدید.",
         reply_markup=main_menu_keyboard()
     )
 
@@ -75,24 +57,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "buy":
-        msg = (
-            "شماره کارت:\n"
-            "5859 8311 3314 0268\n\n"
-            "لطفا فیش واریزی را ارسال کنید."
-        )
+        msg = "شماره کارت:\n5859 8311 3314 0268\n\nلطفا فیش واریزی را ارسال کنید."
         user_waiting_for_receipt.add(query.from_user.id)
         await query.edit_message_text(msg)
-
     elif query.data == "feedback":
-        msg = "لطفا پیام خود را ارسال کنید."
-        await query.edit_message_text(msg)
-
+        await query.edit_message_text("لطفا پیام خود را ارسال کنید.")
     elif query.data == "about_book":
         await query.edit_message_text(ABOUT_BOOK_TEXT)
-
     elif query.data == "about_author":
         await query.edit_message_text(ABOUT_AUTHOR_TEXT)
-
     elif query.data == "audiobook":
         await query.edit_message_text(AUDIOBOOK_TEXT)
 
@@ -154,7 +127,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("فیش شما دریافت شد و در حال بررسی است. لطفا شکیبا باشید.")
         return
 
-    # انتقادات و پیشنهادات به ادمین ارسال میشه
     await context.bot.send_message(
         chat_id=ADMIN_ID,
         text=f"پیام از @{update.effective_user.username or update.effective_user.first_name} (ID: {user_id}):\n\n{text}",
@@ -211,31 +183,39 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("دستور ناشناخته. لطفا از منوی اصلی استفاده کنید.")
 
-def setup_bot():
-    global application, loop
-    
-    # Create new event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    # Build application
+def run_bot():
     application = ApplicationBuilder().token(TOKEN).build()
 
-    # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), message_handler))
     application.add_handler(CallbackQueryHandler(admin_callback_handler))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # Set up webhook
-    url = f"https://yourdomain.com/{TOKEN}"  # Replace with your actual domain
-    loop.run_until_complete(application.bot.set_webhook(url))
+    # Set webhook
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=5000,
+        url_path=TOKEN,
+        webhook_url=f"https://yourdomain.com/{TOKEN}"  # جایگزین با دامنه واقعی شما
+    )
+
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    if request.method == "POST":
+        json_str = request.get_data().decode('UTF-8')
+        update = Update.de_json(json_str, application.bot)
+        application.update_queue.put(update)
+        return '', 200
+    abort(400)
+
+def main():
+    # Run bot in a separate thread
+    bot_thread = Thread(target=run_bot)
+    bot_thread.start()
+
+    # Run Flask app
+    app.run(host="0.0.0.0", port=5000, use_reloader=False)
 
 if __name__ == "__main__":
-    # Setup the bot
-    setup_bot()
-    
-    # Run Flask app
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    main()
