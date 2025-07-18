@@ -1,3 +1,5 @@
+with open("runtime.txt", "w") as f:
+    f.write("python-3.11")
 from flask import Flask, request
 import telegram
 from telegram import *
