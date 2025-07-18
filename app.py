@@ -46,10 +46,11 @@ def main_menu_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
-    data = await request.get_json()
+def webhook():
+    import asyncio
+    data = request.get_json()
     update = Update.de_json(data, app.bot)
-    await app.application.process_update(update)
+    asyncio.get_event_loop().run_until_complete(app.application.process_update(update))
     return "ok"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
