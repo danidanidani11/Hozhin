@@ -184,3 +184,8 @@ def handle_admin_reply(update, context):
 dispatcher.add_handler(MessageHandler(Filters.photo | Filters.text & ~Filters.command, handle_media))
 dispatcher.add_handler(CallbackQueryHandler(handle_callback))
 dispatcher.add_handler(MessageHandler(Filters.text & Filters.user(user_id=ADMIN_ID), handle_admin_reply))
+
+if __name__ == '__main__':
+    PORT = int(os.environ.get('PORT', 5000))
+    bot.set_webhook(f"https://hozhin.onrender.com/{TOKEN}")
+    app.run(host='0.0.0.0', port=PORT)
