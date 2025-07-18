@@ -116,62 +116,67 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # دریافت فیش (عکس یا سند)
         if update.message.photo:
             receipt_file_id = update.message.photo[-1].file_id
+            file_type = "photo"
         elif update.message.document:
             receipt_file_id = update.message.document.file_id
+            file_type = "document"
+        else:
+            file_type = "text"
 
         users_payment[user_id] = {
             "status": "pending",
             "receipt": receipt_file_id if receipt_file_id else text,
             "username": user.username or user.first_name,
+            "file_type": file_type
         }
         user_waiting_for_receipt.remove(user_id)
 
         # ارسال فیش به ادمین برای تایید یا رد
-        if receipt_file_id:
-            if update.message.photo:
-                await context.bot.send_photo(
-                    chat_id=ADMIN_ID,
-                    photo=receipt_file_id,
-                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
-                    reply_markup=InlineKeyboardMarkup(
-                        [[
-                            InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
-                            InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                        ]]
-                    )
-                )
-            elif update.message.document:
-                await context.bot.send_document(
-                    chat_id=ADMIN_ID,
-                    document=receipt_file_id,
-                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
-                    reply_markup=InlineKeyboardMarkup(
-                        [[
-                            InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
-                            InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                        ]]
-                    )
-                )
+        if file_type == "photo":
+            await context.bot.send_photo(
+                chat_id=ADMIN_ID,
+                photo=receipt_file_id,
+                caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
+                        InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
+                    ]
+                ])
+            )
+        elif file_type == "document":
+            await context.bot.send_document(
+                chat_id=ADMIN_ID,
+                document=receipt_file_id,
+                caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
+                        InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
+                    ]
+                ])
+            )
         else:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=f"فیش پرداختی متنی از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
-                reply_markup=InlineKeyboardMarkup(
-                    [[
+                reply_markup=InlineKeyboardMarkup([
+                    [
                         InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
                         InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                    ]]
-                )
+                    ]
+                ])
             )
         await update.message.reply_text("فیش شما دریافت شد و در حال بررسی است. لطفا شکیبا باشید.")
         return
 
     # بخش انتقادات و پیشنهادات (پیام‌ها به ادمین ارسال میشه)
-    await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
-    )
-    await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
+    if text:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
+        )
+        await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -196,15 +201,22 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             pdf_path = "books/hozhin_harman.pdf"
             if os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f:
-                    await context.bot.send_document(chat_id=user_id, document=InputFile(f, filename="hozhin_harman.pdf"))
-                await context.bot.send_message(chat_id=user_id, text="پرداخت شما تایید شد. کتاب برای شما ارسال گردید. از خریدتان متشکریم! ❤️")
+                    await context.bot.send_document(
+                        chat_id=user_id,
+                        document=InputFile(f, filename="hozhin_harman.pdf"),
+                        caption="پرداخت شما تایید شد. کتاب برای شما ارسال گردید. از خریدتان متشکریم! ❤️"
+                    )
             else:
                 await context.bot.send_message(chat_id=ADMIN_ID, text="فایل کتاب در سرور موجود نیست!")
+                await context.bot.send_message(chat_id=user_id, text="مشکلی در ارسال کتاب پیش آمده. لطفا با پشتیبانی تماس بگیرید.")
 
         else:
             users_payment[user_id]["status"] = "rejected"
             await query.edit_message_text(f"❌ پرداخت کاربر {user_id} رد شد.")
-            await context.bot.send_message(chat_id=user_id, text="پرداخت شما تایید نشد. لطفا دوباره فیش را ارسال کنید یا با پشتیبانی تماس بگیرید.")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="پرداخت شما تایید نشد. لطفا دوباره فیش را ارسال کنید یا با پشتیبانی تماس بگیرید."
+            )
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("دستور ناشناخته. لطفا از منوی اصلی استفاده کنید.")
@@ -217,7 +229,7 @@ def run_app():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler, pattern="^(buy|feedback|about_book|about_author|audiobook)$"))
     application.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), message_handler))
-    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_|reject_)"))
+    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern=r"^(approve|reject)_\d+$"))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
     import threading
