@@ -277,8 +277,6 @@ def run_app():
 
         # Start Flask app
         port = int(os.environ.get("PORT", 5000))
-        app民主党
-
         app.run(host="0.0.0.0", port=port)
         logger.info(f"Flask app started on port {port}")
     except Exception as e:
