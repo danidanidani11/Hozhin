@@ -7,19 +7,17 @@ from telegram.ext import (
     MessageHandler, ContextTypes, filters
 )
 
-TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
-ADMIN_ID = 5542927340
-CHANNEL_USERNAME = "fromheartsoul"
+TOKEN = "YOUR_BOT_TOKEN_HERE"
+ADMIN_ID = 123456789  # ایدی ادمین خودت
+CHANNEL_USERNAME = "yourchannelname"
 
 app = Flask(__name__)
 
 users_payment = {}
 user_waiting_for_receipt = set()
 
-ABOUT_BOOK_TEXT = """...متن درباره کتاب..."""  # متن کامل شما اینجا
-
-ABOUT_AUTHOR_TEXT = """...متن درباره نویسنده..."""  # متن کامل شما اینجا
-
+ABOUT_BOOK_TEXT = """متن درباره کتاب..."""
+ABOUT_AUTHOR_TEXT = """متن درباره نویسنده..."""
 AUDIOBOOK_TEXT = "این بخش به زودی فعال میشود."
 
 def main_menu_keyboard():
@@ -32,12 +30,17 @@ def main_menu_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+# این متغیر برای نگهداری application و loop هست
+application = None
+loop = asyncio.new_event_loop()
+
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.method == "POST":
         data = request.get_json(force=True)
-        update = Update.de_json(data, app.bot)
-        asyncio.run(app.application.process_update(update))
+        update = Update.de_json(data, application.bot)
+        # استفاده از loop به صورت sync
+        loop.run_until_complete(application.process_update(update))
         return "ok"
     else:
         abort(405)
@@ -57,34 +60,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"سلام {user.first_name} 👋\n"
-        "به ربات کتاب هوژین و حرمان خوش آمدید.",
+        "به ربات کتاب خوش آمدید.",
         reply_markup=main_menu_keyboard()
     )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    user = update.effective_user
     await query.answer()
 
     if query.data == "buy":
         msg = (
-            "شماره کارت برای پرداخت:\n"
+            "شماره کارت:\n"
             "5859 8311 3314 0268\n\n"
-            "لطفا فیش واریزی را همینجا ارسال کنید تا مورد تایید قرار بگیرد.\n"
-            "هزینه کتاب ۱۱۰ هزارتومان میباشد.\n"
-            "ممکن است تایید فیش کمی زمان‌بر باشد پس لطفا صبور باشید.\n"
-            "در صورت تایید فایل پی دی اف برایتان در همینجا ارسال میشود.\n"
-            "اگر هرگونه مشکلی برایتان پیش آمد در بخش انتقادات و پیشنهادات برای ما ارسال کنید تا بررسی شود."
+            "لطفا فیش واریزی را ارسال کنید."
         )
-        user_waiting_for_receipt.add(user.id)
+        user_waiting_for_receipt.add(query.from_user.id)
         await query.edit_message_text(msg)
 
     elif query.data == "feedback":
-        msg = (
-            "اگر درباره کتاب پیشنهاد یا انتقادی دارید که می‌تواند برای پیشرفت در این مسیر کمک کند حتما در این بخش بنویسید تا بررسی شود.\n"
-            "مطمئن باشید نظرات شما خوانده میشود و باارزش خواهد بود.☺️\n\n"
-            "پیام خود را ارسال کنید:"
-        )
+        msg = "لطفا پیام خود را ارسال کنید."
         await query.edit_message_text(msg)
 
     elif query.data == "about_book":
@@ -97,12 +91,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(AUDIOBOOK_TEXT)
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = user.id
-    text = update.message.text if update.message.text else ""
-    receipt_file_id = None
+    user_id = update.effective_user.id
+    text = update.message.text or ""
 
     if user_id in user_waiting_for_receipt:
+        receipt_file_id = None
         if update.message.photo:
             receipt_file_id = update.message.photo[-1].file_id
         elif update.message.document:
@@ -111,7 +104,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         users_payment[user_id] = {
             "status": "pending",
             "receipt": receipt_file_id if receipt_file_id else text,
-            "username": user.username or user.first_name,
+            "username": update.effective_user.username or update.effective_user.first_name,
         }
         user_waiting_for_receipt.remove(user_id)
 
@@ -120,7 +113,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_photo(
                     chat_id=ADMIN_ID,
                     photo=receipt_file_id,
-                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
+                    caption=f"فیش پرداختی از @{users_payment[user_id]['username']} (ID: {user_id})",
                     reply_markup=InlineKeyboardMarkup(
                         [[
                             InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
@@ -132,7 +125,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_document(
                     chat_id=ADMIN_ID,
                     document=receipt_file_id,
-                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
+                    caption=f"فیش پرداختی از @{users_payment[user_id]['username']} (ID: {user_id})",
                     reply_markup=InlineKeyboardMarkup(
                         [[
                             InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
@@ -143,7 +136,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text=f"فیش پرداختی متنی از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
+                text=f"فیش پرداختی متنی از @{users_payment[user_id]['username']} (ID: {user_id}):\n\n{text}",
                 reply_markup=InlineKeyboardMarkup(
                     [[
                         InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
@@ -151,15 +144,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]]
                 )
             )
+
         await update.message.reply_text("فیش شما دریافت شد و در حال بررسی است. لطفا شکیبا باشید.")
         return
 
-    # پیام انتقاد و پیشنهاد به ادمین
+    # انتقادات و پیشنهادات به ادمین ارسال میشه
     await context.bot.send_message(
         chat_id=ADMIN_ID,
-        text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
+        text=f"پیام از @{update.effective_user.username or update.effective_user.first_name} (ID: {user_id}):\n\n{text}",
     )
-    await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
+    await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون!")
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -185,9 +179,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             if os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f:
                     await context.bot.send_document(chat_id=user_id, document=InputFile(f, filename="hozhin_harman.pdf"))
-                await context.bot.send_message(chat_id=user_id, text="پرداخت شما تایید شد. کتاب برای شما ارسال گردید. از خریدتان متشکریم! ❤️")
+                await context.bot.send_message(chat_id=user_id, text="پرداخت شما تایید شد. کتاب برای شما ارسال گردید. ممنون از خرید شما! ❤️")
             else:
-                await context.bot.send_message(chat_id=ADMIN_ID, text="فایل کتاب در سرور موجود نیست!")
+                await context.bot.send_message(chat_id=ADMIN_ID, text="فایل کتاب موجود نیست!")
 
         else:
             users_payment[user_id]["status"] = "rejected"
@@ -198,9 +192,8 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("دستور ناشناخته. لطفا از منوی اصلی استفاده کنید.")
 
 def main():
+    global application
     application = ApplicationBuilder().token(TOKEN).build()
-    app.application = application
-    app.bot = application.bot
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler, pattern="^(buy|feedback|about_book|about_author|audiobook)$"))
