@@ -227,7 +227,7 @@ def run_app():
     from telegram.constants import ParseMode
     async def set_webhook():
         await application.bot.set_webhook(
-            url=f"https://your-domain.com/{TOKEN}",
+            url=f"https://hozhin.onrender.com/{TOKEN}",
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True
         )
