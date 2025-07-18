@@ -47,7 +47,7 @@ def main_menu_keyboard():
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
-    data = await request.get_json()
+    data = request.get_json()
     update = Update.de_json(data, app.bot)
     await app.application.process_update(update)
     return "ok"
@@ -61,7 +61,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"لطفا ابتدا عضو کانال @{CHANNEL_USERNAME} شوید و دوباره /start را ارسال کنید."
             )
             return
-    except Exception:
+    except Exception as e:
+        print(f"Error checking channel membership: {e}")
         await update.message.reply_text("خطا در بررسی عضویت کانال. لطفا بعدا امتحان کنید.")
         return
 
@@ -129,49 +130,51 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ارسال فیش به ادمین برای تایید یا رد
         if receipt_file_id:
             if update.message.photo:
-                await context.bot.send_photo(
+                sent_message = await context.bot.send_photo(
                     chat_id=ADMIN_ID,
                     photo=receipt_file_id,
-                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
-                    reply_markup=InlineKeyboardMarkup(
-                        [[
-                            InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
-                            InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                        ]]
-                    )
+                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})"
                 )
             elif update.message.document:
-                await context.bot.send_document(
+                sent_message = await context.bot.send_document(
                     chat_id=ADMIN_ID,
                     document=receipt_file_id,
-                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
-                    reply_markup=InlineKeyboardMarkup(
-                        [[
-                            InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
-                            InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                        ]]
-                    )
+                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})"
                 )
+            
+            # اضافه کردن دکمه‌های تایید/رد بعد از ارسال عکس یا سند
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"لطفا فیش پرداختی را بررسی کنید:",
+                reply_to_message_id=sent_message.message_id,
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
+                        InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
+                    ]
+                ])
+            )
         else:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=f"فیش پرداختی متنی از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
-                reply_markup=InlineKeyboardMarkup(
-                    [[
+                reply_markup=InlineKeyboardMarkup([
+                    [
                         InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
                         InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                    ]]
-                )
+                    ]
+                ])
             )
         await update.message.reply_text("فیش شما دریافت شد و در حال بررسی است. لطفا شکیبا باشید.")
         return
 
     # بخش انتقادات و پیشنهادات (پیام‌ها به ادمین ارسال میشه)
-    await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
-    )
-    await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
+    if text:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
+        )
+        await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -215,15 +218,26 @@ def run_app():
     app.bot = application.bot
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_handler, pattern="^(buy|feedback|about_book|about_author|audiobook)$"))
+    application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), message_handler))
-    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_|reject_)"))
+    application.add_handler(CallbackQueryHandler(admin_callback_handler))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
+
+    # Set webhook
+    from telegram.constants import ParseMode
+    async def set_webhook():
+        await application.bot.set_webhook(
+            url=f"https://your-domain.com/{TOKEN}",
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True
+        )
+        print("Webhook set successfully")
+
+    import asyncio
+    asyncio.run(set_webhook())
 
     import threading
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
-
-
 
 if __name__ == "__main__":
     run_app()
