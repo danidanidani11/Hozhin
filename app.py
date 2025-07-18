@@ -8,7 +8,7 @@ from telegram.ext import (
 )
 
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
-ADMIN_ID = 123456789  # ایدی ادمین خودت
+ADMIN_ID = 5542927340  # ایدی ادمین خودت
 CHANNEL_USERNAME = "yourchannelname"
 
 app = Flask(__name__)
