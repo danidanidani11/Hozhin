@@ -7,7 +7,7 @@ from telegram.ext import (
     MessageHandler, ContextTypes, filters
 )
 
-TOKEN = "YOUR_BOT_TOKEN_HERE"
+TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 123456789  # ایدی ادمین خودت
 CHANNEL_USERNAME = "yourchannelname"
 
