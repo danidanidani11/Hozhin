@@ -8,7 +8,7 @@ BOOK_PURCHASE, FEEDBACK, BOOK_INFO, AUTHOR_INFO = range(4)
 # Bot token
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 CHANNEL_USERNAME = "@fromheartsoul"
-ADMIN_ID = YOUR_ADMIN_ID  # Replace with your Telegram user ID (integer)
+ADMIN_ID = 5542927340  # Replace with your Telegram user ID (integer)
 
 # Check if user is subscribed to the channel
 def check_subscription(context, user_id):
