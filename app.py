@@ -67,7 +67,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"سلام {user.first_name} 👋\n"
-        "به ربات کتاب هوژین حرمان خوش آمدید.",
+        "به ربات کتاب هوژین و حرمان خوش آمدید.",
         reply_markup=main_menu_keyboard()
     )
 
