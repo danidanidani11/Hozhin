@@ -9,7 +9,7 @@ from telegram.ext import (
 
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 5542927340  # ایدی ادمین خودت
-CHANNEL_USERNAME = "yourchannelname"
+CHANNEL_USERNAME = "‏fromheartsoul"
 
 app = Flask(__name__)
 
