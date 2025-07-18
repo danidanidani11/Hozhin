@@ -1,38 +1,24 @@
 import os
 import asyncio
-from flask import Flask, request
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
-)
+from flask import Flask, request, abort
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
     MessageHandler, ContextTypes, filters
 )
 
-TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2j28jz0"
+TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 5542927340
 CHANNEL_USERNAME = "fromheartsoul"
 
 app = Flask(__name__)
 
-users_payment = {}  # ذخیره وضعیت پرداخت کاربران
+users_payment = {}
 user_waiting_for_receipt = set()
 
-ABOUT_BOOK_TEXT = """
-رمان هوژین و حرمان روایتی عاشقانه است که تلفیقی از سبک سورئالیسم، رئالیسم و روان است که تفاوت آنها را در طول کتاب درک خواهید کرد.نام هوژین واژه ای کردی است که تعبیر آن کسی است که با آمدنش نور زندگی شما میشود و زندگی را تازه میکند؛در معنای کلی امید را به شما برمیگرداند.حرمان نیز واژه ای کردی_عربی است که معنای آن در وصف کسی است که بالاترین حد اندوه و افسردگی را تجربه کرده و با این حال آن را رها کرده است.در تعبیری مناسب تر؛هوژین در کتاب برای حرمان روزنه نور و امیدی بوده است که باعث رهایی حرمان از غم و اندوه میشود و دلیل اصلی رهایی برای حرمان تلقی میشود.کاژه هم به معنای کسی است که در کنار او احساس امنیت دارید. 
-کتاب از نگاه اول شخص روایت میشود و پیشنهاد من این است که ابتدا کتاب را به ترتیب از بخش اول تا سوم بخوانید؛اما اگر علاقه داشتید مجدداً آن را مطالعه کنید،برای بار دوم، ابتدا بخش دوم و سپس بخش اول و در آخر بخش سوم را بخوانید.در این صورت دو برداشت متفاوت از کتاب خواهید داشت که هر کدام زاویه نگاه متفاوتی در شما به وجود می آورد. 
-برخی بخش ها و تجربه های کتاب بر اساس داستان واقعی روایت شده و برخی هم سناریوهای خیالی و خاص همراه بوده است که دانستن آن برای شما خالی از لطف نیست.یک سری نکات شایان ذکر است که به عنوان  خواننده کتاب حق دارید بدانید.اگر در میان بند های کتاب شعری را مشاهده کردید؛آن ابیات توسط شاعران فرهیخته کشور عزیزمان ایران نوشته شده است و با تحقیق و جست و جو میتوانید متن کامل و نام نویسنده را دریابید.اگر مطلبی را داخل "این کادر" دیدید به معنای این است که آن مطلب احتمالا برگرفته از نامه ها یا بیت های کوتاه است.در آخر هم اگر جملاتی را مشاهده کردید که از قول فلانی روایت شده است و مانند آن را قبلا شنیده اید؛احتمالا برگرفته از مطالبی است که ملکه ذهن من بوده و آنها را در طول کتاب استفاده کرده ام.
+ABOUT_BOOK_TEXT = """...متن درباره کتاب..."""  # متن کامل شما اینجا
 
-درصورت خرید امیدوارم لذت ببرید.
-"""
-
-ABOUT_AUTHOR_TEXT = """
-سلام رفقا 🙋🏻‍♂
-مانی محمودی هستم نویسنده کتاب هوژین حرمان.
-نویسنده ای جوان هستم که با کنار هم گذاشتن نامه های متعدد موفق به نوشتن این کتاب شدم.کار نویسندگی را از سن ۱۳ سالگی با کمک معلم ادبیاتم شروع کردم و تا امروز به این کار را ادامه می‌دهم.این کتاب اولین اثر بنده هستش و در تلاش هستم تا در طی سالیان آینده کتاب های بیشتری خلق کنم.
-
-بیشتر از این وقتتون رو نمیگیرم.امیدوار لذت ببرید😄❤️
-"""
+ABOUT_AUTHOR_TEXT = """...متن درباره نویسنده..."""  # متن کامل شما اینجا
 
 AUDIOBOOK_TEXT = "این بخش به زودی فعال میشود."
 
@@ -48,12 +34,13 @@ def main_menu_keyboard():
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, app.bot)
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(app.application.process_update(update))
-    return "ok"
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        update = Update.de_json(data, app.bot)
+        asyncio.run(app.application.process_update(update))
+        return "ok"
+    else:
+        abort(405)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -116,7 +103,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     receipt_file_id = None
 
     if user_id in user_waiting_for_receipt:
-        # دریافت فیش (عکس یا سند)
         if update.message.photo:
             receipt_file_id = update.message.photo[-1].file_id
         elif update.message.document:
@@ -129,7 +115,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         user_waiting_for_receipt.remove(user_id)
 
-        # ارسال فیش به ادمین برای تایید یا رد
         if receipt_file_id:
             if update.message.photo:
                 await context.bot.send_photo(
@@ -169,7 +154,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("فیش شما دریافت شد و در حال بررسی است. لطفا شکیبا باشید.")
         return
 
-    # بخش انتقادات و پیشنهادات (پیام‌ها به ادمین ارسال میشه)
+    # پیام انتقاد و پیشنهاد به ادمین
     await context.bot.send_message(
         chat_id=ADMIN_ID,
         text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
@@ -212,7 +197,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("دستور ناشناخته. لطفا از منوی اصلی استفاده کنید.")
 
-def run_app():
+def main():
     application = ApplicationBuilder().token(TOKEN).build()
     app.application = application
     app.bot = application.bot
@@ -223,8 +208,7 @@ def run_app():
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_|reject_)"))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # حذف Threading و اجرای ساده Flask
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
 if __name__ == "__main__":
-    run_app()
+    main()
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port)
