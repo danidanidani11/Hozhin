@@ -1,7 +1,7 @@
 import os
 import asyncio
 from threading import Thread
-from flask import Flask, request, abort
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
@@ -13,6 +13,7 @@ ADMIN_ID = 5542927340
 CHANNEL_USERNAME = "fromheartsoul"
 
 app = Flask(__name__)
+application = None
 
 # دیکشنری برای ذخیره اطلاعات پرداخت
 users_payment = {}
@@ -184,6 +185,7 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("دستور ناشناخته. لطفا از منوی اصلی استفاده کنید.")
 
 def run_bot():
+    global application
     application = ApplicationBuilder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
@@ -192,30 +194,20 @@ def run_bot():
     application.add_handler(CallbackQueryHandler(admin_callback_handler))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # Set webhook
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=5000,
-        url_path=TOKEN,
-        webhook_url=f"https://yourdomain.com/{TOKEN}"  # جایگزین با دامنه واقعی شما
-    )
+    application.run_polling()
 
-@app.route(f'/{TOKEN}', methods=['POST'])
-def webhook():
-    if request.method == "POST":
-        json_str = request.get_data().decode('UTF-8')
-        update = Update.de_json(json_str, application.bot)
-        application.update_queue.put(update)
-        return '', 200
-    abort(400)
+@app.route('/')
+def index():
+    return "Bot is running!"
 
 def main():
     # Run bot in a separate thread
     bot_thread = Thread(target=run_bot)
+    bot_thread.daemon = True
     bot_thread.start()
 
     # Run Flask app
-    app.run(host="0.0.0.0", port=5000, use_reloader=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
 
 if __name__ == "__main__":
     main()
