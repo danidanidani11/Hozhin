@@ -1,4 +1,5 @@
 import os
+import logging
 from flask import Flask, request
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
@@ -7,6 +8,13 @@ from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
     MessageHandler, ContextTypes, filters
 )
+
+# Set up logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 5542927340
@@ -47,10 +55,15 @@ def main_menu_keyboard():
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
-    data = await request.get_json()
-    update = Update.de_json(data, app.bot)
-    await app.application.process_update(update)
-    return "ok"
+    try:
+        data = request.get_json()
+        update = Update.de_json(data, app.bot)
+        if update:
+            await app.application.process_update(update)
+        return "ok", 200
+    except Exception as e:
+        logger.error(f"Webhook error: {str(e)}")
+        return "error", 500
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -61,7 +74,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"لطفا ابتدا عضو کانال @{CHANNEL_USERNAME} شوید و دوباره /start را ارسال کنید."
             )
             return
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error checking channel membership: {str(e)}")
         await update.message.reply_text("خطا در بررسی عضویت کانال. لطفا بعدا امتحان کنید.")
         return
 
@@ -127,12 +141,36 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_waiting_for_receipt.remove(user_id)
 
         # ارسال فیش به ادمین برای تایید یا رد
-        if receipt_file_id:
-            if update.message.photo:
-                await context.bot.send_photo(
+        try:
+            if receipt_file_id:
+                if update.message.photo:
+                    await context.bot.send_photo(
+                        chat_id=ADMIN_ID,
+                        photo=receipt_file_id,
+                        caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
+                        reply_markup=InlineKeyboardMarkup(
+                            [[
+                                InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
+                                InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
+                            ]]
+                        )
+                    )
+                elif update.message.document:
+                    await context.bot.send_document(
+                        chat_id=ADMIN_ID,
+                        document=receipt_file_id,
+                        caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
+                        reply_markup=InlineKeyboardMarkup(
+                            [[
+                                InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
+                                InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
+                            ]]
+                        )
+                    )
+            else:
+                await context.bot.send_message(
                     chat_id=ADMIN_ID,
-                    photo=receipt_file_id,
-                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
+                    text=f"فیش پرداختی متنی از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
                     reply_markup=InlineKeyboardMarkup(
                         [[
                             InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
@@ -140,38 +178,22 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ]]
                     )
                 )
-            elif update.message.document:
-                await context.bot.send_document(
-                    chat_id=ADMIN_ID,
-                    document=receipt_file_id,
-                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
-                    reply_markup=InlineKeyboardMarkup(
-                        [[
-                            InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
-                            InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                        ]]
-                    )
-                )
-        else:
-            await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=f"فیش پرداختی متنی از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
-                reply_markup=InlineKeyboardMarkup(
-                    [[
-                        InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
-                        InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                    ]]
-                )
-            )
-        await update.message.reply_text("فیش شما دریافت شد و در حال بررسی است. لطفا شکیبا باشید.")
+            await update.message.reply_text("فیش شما دریافت شد و در حال بررسی است. لطفا شکیبا باشید.")
+        except Exception as e:
+            logger.error(f"Error sending receipt to admin: {str(e)}")
+            await update.message.reply_text("خطایی در ارسال فیش رخ داد. لطفا دوباره تلاش کنید.")
         return
 
     # بخش انتقادات و پیشنهادات (پیام‌ها به ادمین ارسال میشه)
-    await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
-    )
-    await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
+        )
+        await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
+    except Exception as e:
+        logger.error(f"Error sending feedback to admin: {str(e)}")
+        await update.message.reply_text("خطایی در ارسال پیام رخ داد. لطفا دوباره تلاش کنید.")
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -208,6 +230,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         text="متاسفانه مشکلی در ارسال فایل کتاب وجود دارد. لطفا با پشتیبانی تماس بگیرید."
                     )
             except Exception as e:
+                logger.error(f"Error sending PDF to user {user_id}: {str(e)}")
                 await query.message.reply_text(f"خطا در ارسال فایل: {str(e)}")
                 await context.bot.send_message(
                     chat_id=user_id,
@@ -227,19 +250,39 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("دستور ناشناخته. لطفا از منوی اصلی استفاده کنید.")
 
+async def set_webhook(application):
+    webhook_url = f"https://your-app-name.onrender.com/{TOKEN}"  # Replace with your actual app URL
+    try:
+        await application.bot.set_webhook(url=webhook_url)
+        logger.info(f"Webhook set to {webhook_url}")
+    except Exception as e:
+        logger.error(f"Error setting webhook: {str(e)}")
+
 def run_app():
-    application = ApplicationBuilder().token(TOKEN).build()
-    app.application = application
-    app.bot = application.bot
+    try:
+        application = ApplicationBuilder().token(TOKEN).build()
+        app.application = application
+        app.bot = application.bot
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_handler, pattern="^(buy|feedback|about_book|about_author|audiobook)$"))
-    application.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), message_handler))
-    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_|reject_)"))
-    application.add_handler(MessageHandler(filters.COMMAND, unknown))
+        # Add handlers
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CallbackQueryHandler(button_handler, pattern="^(buy|feedback|about_book|about_author|audiobook)$"))
+        application.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), message_handler))
+        application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_|reject_)"))
+        application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    import threading
-    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
+        # Set webhook
+        import asyncio
+        asyncio.run(set_webhook(application))
+
+        # Start Flask app
+        port = int(os.environ.get("PORT", 5000))
+        app民主党
+
+        app.run(host="0.0.0.0", port=port)
+        logger.info(f"Flask app started on port {port}")
+    except Exception as e:
+        logger.error(f"Error starting app: {str(e)}")
 
 if __name__ == "__main__":
     run_app()
