@@ -191,7 +191,7 @@ def run_bot():
     # تنظیم وب‌هوک
     async def set_webhook():
         await application.bot.set_webhook(
-            url=f"https://YOUR_DOMAIN.com/{TOKEN}",
+            url=f"https://hozhin.onrender.com/{TOKEN}",
             drop_pending_updates=True
         )
         print("Webhook set up successfully")
