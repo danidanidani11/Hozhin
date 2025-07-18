@@ -1,11 +1,13 @@
 import os
 from flask import Flask, request
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ContextTypes, filters
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
 )
 
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
@@ -17,9 +19,8 @@ app = Flask(__name__)
 users_payment = {}
 user_waiting_for_receipt = set()
 
-# متن‌های ثابت
-ABOUT_BOOK_TEXT = """..."""
-ABOUT_AUTHOR_TEXT = """..."""
+ABOUT_BOOK_TEXT = """... متن درباره کتاب ..."""
+ABOUT_AUTHOR_TEXT = """... متن درباره نویسنده ..."""
 AUDIOBOOK_TEXT = "این بخش به زودی فعال میشود."
 
 def main_menu_keyboard():
@@ -45,14 +46,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         member = await context.bot.get_chat_member(f"@{CHANNEL_USERNAME}", user.id)
         if member.status in ["left", "kicked"]:
             await update.message.reply_text(
-                f"لطفا ابتدا عضو کانال @{CHANNEL_USERNAME} شوید و دوباره /start را ارسال کنید."
+                f"لطفاً ابتدا عضو کانال @{CHANNEL_USERNAME} شوید و سپس دوباره /start را ارسال کنید."
             )
             return
     except Exception as e:
         print(f"Error checking channel membership: {e}")
         await update.message.reply_text(
-            "به ربات کتاب هوژین حرمان خوش آمدید.\n"
-            f"متاسفانه بررسی عضویت کانال با مشکل مواجه شد. لطفا بعداً تلاش کنید."
+            "خطا در بررسی عضویت کانال. لطفاً بعداً تلاش کنید."
         )
         return
 
@@ -71,9 +71,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "شماره کارت برای پرداخت:\n"
             "5859 8311 3314 0268\n\n"
-            "لطفا فیش واریزی را همینجا ارسال کنید.\n"
+            "لطفاً فیش واریزی را ارسال کنید.\n"
             "هزینه کتاب: 110 هزار تومان\n"
-            "پس از تایید، فایل PDF ارسال خواهد شد."
+            "پس از تأیید، فایل PDF ارسال خواهد شد."
         )
     elif query.data == "feedback":
         await query.edit_message_text("پیام خود را ارسال کنید...")
@@ -92,10 +92,24 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         receipt = None
         if update.message.photo:
             receipt = update.message.photo[-1].file_id
+            msg = await context.bot.send_photo(
+                ADMIN_ID, 
+                photo=receipt,
+                caption=f"پرداخت جدید از کاربر {user_id}"
+            )
         elif update.message.document:
             receipt = update.message.document.file_id
+            msg = await context.bot.send_document(
+                ADMIN_ID,
+                document=receipt,
+                caption=f"پرداخت جدید از کاربر {user_id}"
+            )
         else:
             receipt = update.message.text
+            msg = await context.bot.send_message(
+                ADMIN_ID,
+                text=f"پرداخت جدید از کاربر {user_id}:\n{receipt}"
+            )
 
         users_payment[user_id] = {
             "status": "pending",
@@ -104,33 +118,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         user_waiting_for_receipt.remove(user_id)
 
-        # ارسال به ادمین
-        if update.message.photo:
-            msg = await context.bot.send_photo(
-                ADMIN_ID, 
-                photo=receipt,
-                caption=f"پرداخت جدید از کاربر {user_id}"
-            )
-        elif update.message.document:
-            msg = await context.bot.send_document(
-                ADMIN_ID,
-                document=receipt,
-                caption=f"پرداخت جدید از کاربر {user_id}"
-            )
-        else:
-            msg = await context.bot.send_message(
-                ADMIN_ID,
-                text=f"پرداخت جدید از کاربر {user_id}:\n{receipt}"
-            )
-
-        # افزودن دکمه‌های تایید/رد
+        # افزودن دکمه‌های تأیید/رد
         await context.bot.send_message(
             ADMIN_ID,
-            text="لطفا پرداخت را بررسی کنید:",
+            text="لطفاً پرداخت را بررسی کنید:",
             reply_to_message_id=msg.message_id,
             reply_markup=InlineKeyboardMarkup([
                 [
-                    InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
+                    InlineKeyboardButton("تأیید ✅", callback_data=f"approve_{user_id}"),
                     InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
                 ]
             ])
@@ -158,7 +153,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     if action == "approve":
         users_payment[user_id]["status"] = "approved"
-        await query.edit_message_text("پرداخت تایید شد ✅")
+        await query.edit_message_text("پرداخت تأیید شد ✅")
         
         try:
             with open("books/hozhin_harman.pdf", "rb") as f:
@@ -171,14 +166,14 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             print(f"Error sending book: {e}")
             await context.bot.send_message(
                 ADMIN_ID,
-                "خطا در ارسال کتاب! لطفا فایل را بررسی کنید."
+                "خطا در ارسال کتاب! لطفاً فایل را بررسی کنید."
             )
     else:
         users_payment[user_id]["status"] = "rejected"
         await query.edit_message_text("پرداخت رد شد ❌")
         await context.bot.send_message(
             user_id,
-            "پرداخت شما تایید نشد. لطفا مجددا تلاش کنید."
+            "پرداخت شما تأیید نشد. لطفاً مجدداً تلاش کنید."
         )
 
 def run_bot():
