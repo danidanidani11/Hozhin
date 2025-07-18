@@ -223,7 +223,6 @@ def run_app():
     import threading
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
 
-‏application.run_polling()
 
 
 if __name__ == "__main__":
