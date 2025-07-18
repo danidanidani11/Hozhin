@@ -1,6 +1,8 @@
 import os
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+)
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
     MessageHandler, ContextTypes, filters
@@ -12,10 +14,26 @@ CHANNEL_USERNAME = "fromheartsoul"
 
 app = Flask(__name__)
 
-users_payment = {}
+users_payment = {}  # ذخیره وضعیت پرداخت کاربران
 user_waiting_for_receipt = set()
 
-# ... (متن‌های ABOUT_BOOK_TEXT, ABOUT_AUTHOR_TEXT, AUDIOBOOK_TEXT مانند قبل)
+ABOUT_BOOK_TEXT = """
+رمان هوژین و حرمان روایتی عاشقانه است که تلفیقی از سبک سورئالیسم، رئالیسم و روان است که تفاوت آنها را در طول کتاب درک خواهید کرد.نام هوژین واژه ای کردی است که تعبیر آن کسی است که با آمدنش نور زندگی شما میشود و زندگی را تازه میکند؛در معنای کلی امید را به شما برمیگرداند.حرمان نیز واژه ای کردی_عربی است که معنای آن در وصف کسی است که بالاترین حد اندوه و افسردگی را تجربه کرده و با این حال آن را رها کرده است.در تعبیری مناسب تر؛هوژین در کتاب برای حرمان روزنه نور و امیدی بوده است که باعث رهایی حرمان از غم و اندوه میشود و دلیل اصلی رهایی برای حرمان تلقی میشود.کاژه هم به معنای کسی است که در کنار او احساس امنیت دارید. 
+کتاب از نگاه اول شخص روایت میشود و پیشنهاد من این است که ابتدا کتاب را به ترتیب از بخش اول تا سوم بخوانید؛اما اگر علاقه داشتید مجدداً آن را مطالعه کنید،برای بار دوم، ابتدا بخش دوم و سپس بخش اول و در آخر بخش سوم را بخوانید.در این صورت دو برداشت متفاوت از کتاب خواهید داشت که هر کدام زاویه نگاه متفاوتی در شما به وجود می آورد. 
+برخی بخش ها و تجربه های کتاب بر اساس داستان واقعی روایت شده و برخی هم سناریوهای خیالی و خاص همراه بوده است که دانستن آن برای شما خالی از لطف نیست.یک سری نکات شایان ذکر است که به عنوان  خواننده کتاب حق دارید بدانید.اگر در میان بند های کتاب شعری را مشاهده کردید؛آن ابیات توسط شاعران فرهیخته کشور عزیزمان ایران نوشته شده است و با تحقیق و جست و جو میتوانید متن کامل و نام نویسنده را دریابید.اگر مطلبی را داخل "این کادر" دیدید به معنای این است که آن مطلب احتمالا برگرفته از نامه ها یا بیت های کوتاه است.در آخر هم اگر جملاتی را مشاهده کردید که از قول فلانی روایت شده است و مانند آن را قبلا شنیده اید؛احتمالا برگرفته از مطالبی است که ملکه ذهن من بوده و آنها را در طول کتاب استفاده کرده ام.
+
+درصورت خرید امیدوارم لذت ببرید.
+"""
+
+ABOUT_AUTHOR_TEXT = """
+سلام رفقا 🙋🏻‍♂
+مانی محمودی هستم نویسنده کتاب هوژین حرمان.
+نویسنده ای جوان هستم که با کنار هم گذاشتن نامه های متعدد موفق به نوشتن این کتاب شدم.کار نویسندگی را از سن ۱۳ سالگی با کمک معلم ادبیاتم شروع کردم و تا امروز به این کار را ادامه می‌دهم.این کتاب اولین اثر بنده هستش و در تلاش هستم تا در طی سالیان آینده کتاب های بیشتری خلق کنم.
+
+بیشتر از این وقتتون رو نمیگیرم.امیدوار لذت ببرید😄❤️
+"""
+
+AUDIOBOOK_TEXT = "این بخش به زودی فعال میشود."
 
 def main_menu_keyboard():
     keyboard = [
@@ -27,6 +45,13 @@ def main_menu_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+@app.route(f"/{TOKEN}", methods=["POST"])
+async def webhook():
+    data = await request.get_json()
+    update = Update.de_json(data, app.bot)
+    await app.application.process_update(update)
+    return "ok"
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     try:
@@ -36,44 +61,59 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"لطفا ابتدا عضو کانال @{CHANNEL_USERNAME} شوید و دوباره /start را ارسال کنید."
             )
             return
-    except Exception as e:
-        print(f"خطا در بررسی عضویت کانال: {e}")
+    except Exception:
         await update.message.reply_text("خطا در بررسی عضویت کانال. لطفا بعدا امتحان کنید.")
         return
 
     await update.message.reply_text(
-        f"سلام {user.first_name} 👋\nبه ربات کتاب هوژین حرمان خوش آمدید.",
+        f"سلام {user.first_name} 👋\n"
+        "به ربات کتاب هوژین حرمان خوش آمدید.",
         reply_markup=main_menu_keyboard()
     )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    user = update.effective_user
     await query.answer()
 
     if query.data == "buy":
         msg = (
-            "شماره کارت:\n5859 8311 3314 0268\n\n"
-            "مبلغ: 110,000 تومان\n"
-            "لطفا پس از پرداخت، تصویر فیش واریزی را ارسال کنید."
+            "شماره کارت برای پرداخت:\n"
+            "5859 8311 3314 0268\n\n"
+            "لطفا فیش واریزی را همینجا ارسال کنید تا مورد تایید قرار بگیرد.\n"
+            "هزینه کتاب ۱۱۰ هزارتومان میباشد.\n"
+            "ممکن است تایید فیش کمی زمان‌بر باشد پس لطفا صبور باشید.\n"
+            "در صورت تایید فایل پی دی اف برایتان در همینجا ارسال میشود.\n"
+            "اگر هرگونه مشکلی برایتان پیش آمد در بخش انتقادات و پیشنهادات برای ما ارسال کنید تا بررسی شود."
         )
-        user_waiting_for_receipt.add(query.from_user.id)
+        user_waiting_for_receipt.add(user.id)
         await query.edit_message_text(msg)
+
     elif query.data == "feedback":
-        await query.edit_message_text("لطفا نظر خود را ارسال کنید:")
+        msg = (
+            "اگر درباره کتاب پیشنهاد یا انتقادی دارید که می‌تواند برای پیشرفت در این مسیر کمک کند حتما در این بخش بنویسید تا بررسی شود.\n"
+            "مطمئن باشید نظرات شما خوانده میشود و باارزش خواهد بود.☺️\n\n"
+            "پیام خود را ارسال کنید:"
+        )
+        await query.edit_message_text(msg)
+
     elif query.data == "about_book":
         await query.edit_message_text(ABOUT_BOOK_TEXT)
+
     elif query.data == "about_author":
         await query.edit_message_text(ABOUT_AUTHOR_TEXT)
+
     elif query.data == "audiobook":
         await query.edit_message_text(AUDIOBOOK_TEXT)
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
-    text = update.message.text or ""
+    text = update.message.text if update.message.text else ""
+    receipt_file_id = None
 
     if user_id in user_waiting_for_receipt:
-        receipt_file_id = None
+        # دریافت فیش (عکس یا سند)
         if update.message.photo:
             receipt_file_id = update.message.photo[-1].file_id
         elif update.message.document:
@@ -86,125 +126,120 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         user_waiting_for_receipt.remove(user_id)
 
+        # ارسال فیش به ادمین برای تایید یا رد
         if receipt_file_id:
             if update.message.photo:
                 await context.bot.send_photo(
                     chat_id=ADMIN_ID,
                     photo=receipt_file_id,
-                    caption=f"فیش پرداختی از @{users_payment[user_id]['username']} (ID: {user_id})",
-                    reply_markup=InlineKeyboardMarkup([
-                        [
+                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[
                             InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
                             InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                        ]
-                    ])
+                        ]]
+                    )
                 )
             elif update.message.document:
                 await context.bot.send_document(
                     chat_id=ADMIN_ID,
                     document=receipt_file_id,
-                    caption=f"فیش پرداختی از @{users_payment[user_id]['username']} (ID: {user_id})",
-                    reply_markup=InlineKeyboardMarkup([
-                        [
+                    caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[
                             InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
                             InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                        ]
-                    ])
+                        ]]
+                    )
                 )
         else:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text=f"پیام پرداخت از @{users_payment[user_id]['username']} (ID: {user_id}):\n\n{text}",
-                reply_markup=InlineKeyboardMarkup([
-                    [
+                text=f"فیش پرداختی متنی از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
+                reply_markup=InlineKeyboardMarkup(
+                    [[
                         InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
                         InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                    ]
-                ])
+                    ]]
+                )
             )
-
-        await update.message.reply_text("✅ فیش پرداخت شما دریافت شد. پس از تأیید، کتاب برای شما ارسال خواهد شد.")
+        await update.message.reply_text("فیش شما دریافت شد و در حال بررسی است. لطفا شکیبا باشید.")
         return
 
-    # اگر پیام معمولی بود (برای بخش انتقادات و پیشنهادات)
+    # بخش انتقادات و پیشنهادات (پیام‌ها به ادمین ارسال میشه)
     await context.bot.send_message(
         chat_id=ADMIN_ID,
-        text=f"پیام جدید از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}"
+        text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
     )
-    await update.message.reply_text("پیام شما دریافت شد. با تشکر از نظر شما!")
+    await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    
     data = query.data
-    admin_id = query.from_user.id
-    
+    admin_id = update.effective_user.id
+    await query.answer()
+
     if admin_id != ADMIN_ID:
-        await query.edit_message_text("⛔ شما مجوز انجام این عمل را ندارید!")
+        await query.message.reply_text("شما اجازه انجام این کار را ندارید.")
         return
 
-    if not (data.startswith("approve_") or data.startswith("reject_")):
-        return
+    if data.startswith("approve_") or data.startswith("reject_"):
+        user_id = int(data.split("_")[1])
+        if user_id not in users_payment:
+            await query.message.reply_text("کاربر یافت نشد یا فیش قبلا بررسی شده.")
+            return
 
-    action, user_id = data.split("_")
-    user_id = int(user_id)
-
-    if user_id not in users_payment:
-        await query.edit_message_text("⚠️ کاربر یافت نشد یا قبلاً پردازش شده است.")
-        return
-
-    if action == "approve":
-        users_payment[user_id]["status"] = "approved"
-        await query.edit_message_text(f"✅ پرداخت کاربر {user_id} تأیید شد.")
-        
-        try:
+        if data.startswith("approve_"):
+            users_payment[user_id]["status"] = "approved"
             pdf_path = "books/hozhin_harman.pdf"
-            if os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    await context.bot.send_document(
+            try:
+                if os.path.exists(pdf_path):
+                    with open(pdf_path, "rb") as f:
+                        await context.bot.send_document(
+                            chat_id=user_id,
+                            document=InputFile(f, filename="hozhin_harman.pdf"),
+                            caption="پرداخت شما تایید شد. کتاب برای شما ارسال گردید. از خریدتان متشکریم! ❤️"
+                        )
+                    await query.message.edit_text(f"✅ پرداخت کاربر {users_payment[user_id]['username']} (ID: {user_id}) تایید شد.")
+                else:
+                    await query.message.reply_text("فایل کتاب در سرور موجود نیست! لطفا بررسی کنید.")
+                    await context.bot.send_message(
                         chat_id=user_id,
-                        document=InputFile(f, filename="hozhin_harman.pdf"),
-                        caption="📚 کتاب هوژین حرمان"
+                        text="متاسفانه مشکلی در ارسال فایل کتاب وجود دارد. لطفا با پشتیبانی تماس بگیرید."
                     )
+            except Exception as e:
+                await query.message.reply_text(f"خطا در ارسال فایل: {str(e)}")
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text="✅ پرداخت شما تأیید شد! کتاب در بالا برای شما ارسال گردید.\nبا تشکر از خرید شما! ❤️"
+                    text="متاسفانه مشکلی در ارسال فایل کتاب وجود دارد. لطفا با پشتیبانی تماس بگیرید."
                 )
-            else:
-                await context.bot.send_message(
-                    chat_id=ADMIN_ID,
-                    text="❌ فایل کتاب یافت نشد! لطفاً مسیر را بررسی کنید."
-                )
-        except Exception as e:
-            print(f"خطا در ارسال کتاب: {e}")
+        else:
+            users_payment[user_id]["status"] = "rejected"
+            await query.message.edit_text(f"❌ پرداخت کاربر {users_payment[user_id]['username']} (ID: {user_id}) رد شد.")
             await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=f"❌ خطا در ارسال کتاب به کاربر {user_id}: {str(e)}"
+                chat_id=user_id,
+                text="پرداخت شما تایید نشد. لطفا دوباره فیش را ارسال کنید یا با پشتیبانی تماس بگیرید."
             )
-    else:
-        users_payment[user_id]["status"] = "rejected"
-        await query.edit_message_text(f"❌ پرداخت کاربر {user_id} رد شد.")
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="❌ پرداخت شما تأیید نشد.\nلطفاً:\n1. مجدداً فیش واریزی را ارسال کنید\n2. یا با پشتیبانی تماس بگیرید."
-        )
+
+        # حذف اطلاعات پرداخت کاربر پس از پردازش
+        del users_payment[user_id]
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⚠️ دستور نامعتبر. لطفاً از منوی اصلی استفاده کنید.")
+    await update.message.reply_text("دستور ناشناخته. لطفا از منوی اصلی استفاده کنید.")
 
-def setup_handlers(application):
+def run_app():
+    application = ApplicationBuilder().token(TOKEN).build()
+    app.application = application
+    app.bot = application.bot
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler, pattern="^(buy|feedback|about_book|about_author|audiobook)$"))
     application.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), message_handler))
-    application.add_handler(CallbackQueryHandler(admin_callback_handler))
+    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_|reject_)"))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-def run_bot():
-    application = ApplicationBuilder().token(TOKEN).build()
-    setup_handlers(application)
-    application.run_polling()
+    import threading
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
 
 if __name__ == "__main__":
-    print("✅ ربات در حال راه‌اندازی...")
-    run_bot()
+    run_app()
