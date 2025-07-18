@@ -1,4 +1,5 @@
 import os
+import asyncio
 from flask import Flask, request
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
@@ -8,7 +9,7 @@ from telegram.ext import (
     MessageHandler, ContextTypes, filters
 )
 
-TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
+TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2j28jz0"
 ADMIN_ID = 5542927340
 CHANNEL_USERNAME = "fromheartsoul"
 
@@ -47,10 +48,11 @@ def main_menu_keyboard():
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    import asyncio
-    data = request.get_json()
+    data = request.get_json(force=True)
     update = Update.de_json(data, app.bot)
-    asyncio.get_event_loop().run_until_complete(app.application.process_update(update))
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(app.application.process_update(update))
     return "ok"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -221,9 +223,8 @@ def run_app():
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_|reject_)"))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    import threading
-    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
-
+    # حذف Threading و اجرای ساده Flask
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
 if __name__ == "__main__":
     run_app()
