@@ -89,7 +89,8 @@ def handle_approval(call):
 @bot.message_handler(func=lambda msg: msg.text == "🗣️ انتقادات و پیشنهادات")
 def suggestions(message):
     user_state[message.chat.id] = 'awaiting_feedback'
-    bot.send_message(message.chat.id, "لطفاً نظر یا انتقاد خود را بنویسید:", reply_markup=get_back_keyboard())
+    bot.send_message(message.chat.id, """اگر درباره کتاب پیشنهاد یا انتقادی دارید که می‌تواند برای پیشرفت در این مسیر کمک کند حتما در این بخش بنویسید تا بررسی شود
+مطمئن باشید نظرات شما خوانده میشود و باارزش خواهد بود.☺️""", reply_markup=get_back_keyboard())
 
 @bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_feedback')
 def receive_feedback(message):
