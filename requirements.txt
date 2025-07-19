@@ -1,3 +1,2 @@
-flask
-aiogram==3.7.0
-hypercorn
+Flask==3.1.1
+pyTelegramBotAPI==4.13.0
