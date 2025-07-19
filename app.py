@@ -11,6 +11,7 @@ from telegram.ext import (
     ContextTypes,
 )
 import asyncio
+from threading import Thread
 
 # Configure logging
 logging.basicConfig(
@@ -170,9 +171,9 @@ bot_app.add_handler(MessageHandler(filters.PHOTO, handle_message))
 bot_app.add_handler(CommandHandler("approve", approve))
 bot_app.add_handler(CommandHandler("reject", reject))
 
-# Webhook route
+# Webhook route - synchronous version
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
     try:
         data = request.get_json()
         if not data:
@@ -181,7 +182,8 @@ async def webhook():
         
         update = Update.de_json(data, bot_app.bot)
         if update:
-            await bot_app.process_update(update)
+            # Run the async function in a new thread
+            Thread(target=asyncio.run, args=(bot_app.process_update(update),)).start()
             logger.info("Webhook processed successfully")
             return {"status": "ok"}
         else:
@@ -191,31 +193,28 @@ async def webhook():
         logger.error(f"Error in webhook: {str(e)}")
         return {"status": "error", "message": str(e)}, 500
 
-# Set webhook
-async def set_webhook():
+# Set webhook - synchronous version
+def set_webhook_sync():
     webhook_url = f"https://hozhin.onrender.com/{TOKEN}"
     try:
-        await bot_app.bot.set_webhook(url=webhook_url)
+        asyncio.run(bot_app.bot.set_webhook(url=webhook_url))
         logger.info("Webhook set successfully")
     except Exception as e:
         logger.error(f"Failed to set webhook: {str(e)}")
+
+# Initialize function - synchronous version
+def initialize_sync():
+    asyncio.run(bot_app.initialize())
+    set_webhook_sync()
 
 # Main route
 @app.route("/")
 def index():
     return "Telegram Bot is running!"
 
-# Initialize function
-async def initialize():
-    await bot_app.initialize()
-    await set_webhook()
-
 # Run initialization when app starts
-@app.before_request
-async def handle_initialization():
-    if not hasattr(app, 'initialized'):
-        await initialize()
-        app.initialized = True
+with app.app_context():
+    initialize_sync()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
