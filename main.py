@@ -31,6 +31,11 @@ def start_handler(message):
     )
 
 # --- خرید کتاب ---
+def get_back_to_menu_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("🔙 بازگشت به منو")
+    return markup
+
 @bot.message_handler(func=lambda msg: msg.text == "📖 خرید کتاب")
 def buy_book(message):
     user_state[message.chat.id] = 'awaiting_receipt'
@@ -84,6 +89,11 @@ def handle_receipt(message):
 
     bot.send_message(ADMIN_ID, "آیا رسید را تایید می‌کنید؟", reply_markup=markup)
     bot.send_message(message.chat.id, "رسید شما برای بررسی ارسال شد ✅")
+
+@bot.message_handler(func=lambda msg: msg.text == "🔙 بازگشت به منو")
+def back_to_menu(message):
+    user_state.pop(message.chat.id, None)
+    bot.send_message(message.chat.id, "شما به منوی اصلی بازگشتید.", reply_markup=get_main_keyboard())
 
 # --- پاسخ ادمین به تایید یا رد ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_") or call.data.startswith("reject_"))
