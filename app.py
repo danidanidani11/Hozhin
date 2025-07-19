@@ -75,7 +75,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    # حذف دکمه‌ها بعد از کلیک
     try:
         await query.edit_message_reply_markup(reply_markup=None)
     except:
@@ -98,7 +97,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "🎧 کتاب صوتی" in query.data:
         await query.message.reply_text(TEXTS["audio"], reply_markup=main_menu())
     
-    # پردازش تایید/رد پرداخت
     elif query.data.startswith("approve_"):
         _, user_id, msg_id = query.data.split("_")
         try:
@@ -153,25 +151,36 @@ bot_app.add_handler(CallbackQueryHandler(button_click))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 bot_app.add_handler(MessageHandler(filters.PHOTO, handle_message))
 
+# تابع برای اجرای async در thread جدید
+def run_async(coro):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(coro)
+    loop.close()
+
 # وب‌هوک
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     try:
         update = Update.de_json(request.get_json(), bot_app.bot)
-        Thread(target=asyncio.run, args=(bot_app.process_update(update),)).start()
+        Thread(target=run_async, args=(bot_app.process_update(update),)).start()
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"خطا در وب‌هوک: {e}")
         return {"status": "error"}, 500
 
 # تنظیم وب‌هوک
-def setup():
-    asyncio.run(bot_app.initialize())
-    asyncio.run(bot_app.bot.set_webhook(f"https://hozhin.onrender.com/{TOKEN}"))
+async def setup_webhook():
+    await bot_app.initialize()
+    await bot_app.bot.set_webhook(f"https://hozhin.onrender.com/{TOKEN}")
 
 # اجرای اولیه
-with app.app_context():
-    setup()
+def setup():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(setup_webhook())
+    loop.close()
 
 if __name__ == "__main__":
+    setup()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
