@@ -43,10 +43,10 @@ BUY_BOOK_TEXT = """لطفا فیش پرداخت را همینجا ارسال ک�
 SUGGESTION_TEXT = """اگر درباره کتاب پیشنهاد یا انتقادی دارید که می‌تواند برای پیشرفت در این مسیر کمک کند، حتما در این بخش بنویسید تا بررسی شود.
 مطمئن باشید نظرات شما خوانده می‌شود و باارزش خواهد بود. ☺️"""
 
-ABOUT_BOOK_TEXT = """رمان هوژین و حرمان روایتی عاشقانه است که تلفیقی از سبک سورئالیسم، رئالیسم و روان است که تفاوت آنها را در طول کتاب درک خواهید کرد..."""  # [rest of text unchanged]
+ABOUT_BOOK_TEXT = """رمان هوژین و حرمان روایتی عاشقانه است که تلفیقی از سبک سورئالیسم، رئالیسم و روان است که تفاوت آنها را در طول کتاب درک خواهید کرد..."""
 
 ABOUT_AUTHOR_TEXT = """سلام رفقا 🙋🏻‍♂
-مانی محمودی هستم، نویسنده کتاب هوژین حرمان..."""  # [rest of text unchanged]
+مانی محمودی هستم، نویسنده کتاب هوژین حرمان..."""
 
 AUDIO_BOOK_TEXT = "این بخش به زودی فعال می‌شود."
 
@@ -62,11 +62,11 @@ def main_menu():
     return InlineKeyboardMarkup(keyboard)
 
 # Approval menu for admin
-def approval_menu(user_id, receipt_message_id):
+def approval_menu(user_id, receipt_msg_id):
     keyboard = [
         [
-            InlineKeyboardButton("✅ تایید پرداخت", callback_data=f"confirm_{user_id}_{receipt_message_id}"),
-            InlineKeyboardButton("❌ رد پرداخت", callback_data=f"reject_{user_id}_{receipt_message_id}")
+            InlineKeyboardButton("✅ تایید پرداخت", callback_data=f"confirm_{user_id}_{receipt_msg_id}"),
+            InlineKeyboardButton("❌ رد پرداخت", callback_data=f"reject_{user_id}_{receipt_msg_id}")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -77,13 +77,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = f"سلام {user.first_name}!\nبه بات هوژین و حرمان خوش آمدید. 😊\nلطفاً از منوی زیر یکی از گزینه‌ها را انتخاب کنید:"
     await update.message.reply_text(welcome_text, reply_markup=main_menu())
 
-# Button handler with fix for double-click issue
+# Button handler with double-click fix
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    # Edit message to prevent double-click
-    await query.edit_message_reply_markup(reply_markup=None)
+    # Remove buttons immediately to prevent double-click
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception as e:
+        logger.error(f"Error removing buttons: {e}")
 
     if query.data == "buy_book":
         await query.message.reply_text(BUY_BOOK_TEXT)
@@ -99,7 +102,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(AUDIO_BOOK_TEXT, reply_markup=main_menu())
     elif query.data.startswith("confirm_"):
         # Handle payment confirmation
-        _, user_id, receipt_message_id = query.data.split("_")
+        _, user_id, receipt_msg_id = query.data.split("_")
         user_id = int(user_id)
         
         try:
@@ -110,20 +113,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         document=file,
                         caption="فیش شما تأیید شد! فایل PDF کتاب برای شما ارسال شد. امیدوارم لذت ببرید! 😊"
                     )
+                # Delete receipt message
                 await context.bot.delete_message(
                     chat_id=ADMIN_ID,
-                    message_id=int(receipt_message_id)
+                    message_id=int(receipt_msg_id)
                 )
                 await query.message.reply_text(f"فایل PDF برای کاربر {user_id} ارسال شد.")
             else:
                 await query.message.reply_text("فایل PDF یافت نشد. لطفاً بررسی کنید.")
         except Exception as e:
-            logger.error(f"Error approving payment: {str(e)}")
+            logger.error(f"Error approving payment: {e}")
             await query.message.reply_text("خطا در ارسال فایل. لطفاً دوباره تلاش کنید.")
             
     elif query.data.startswith("reject_"):
         # Handle payment rejection
-        _, user_id, receipt_message_id = query.data.split("_")
+        _, user_id, receipt_msg_id = query.data.split("_")
         user_id = int(user_id)
         
         try:
@@ -132,13 +136,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text="متأسفانه فیش شما تأیید نشد. لطفاً دوباره تلاش کنید یا با ادمین تماس بگیرید.",
                 reply_markup=main_menu()
             )
+            # Delete receipt message
             await context.bot.delete_message(
                 chat_id=ADMIN_ID,
-                message_id=int(receipt_message_id)
+                message_id=int(receipt_msg_id)
             )
             await query.message.reply_text(f"فیش کاربر {user_id} رد شد.")
         except Exception as e:
-            logger.error(f"Error rejecting payment: {str(e)}")
+            logger.error(f"Error rejecting payment: {e}")
             await query.message.reply_text("خطا در رد پرداخت. لطفاً دوباره تلاش کنید.")
 
 # Message handler
@@ -156,8 +161,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message_id=update.message.message_id
             )
             
-            # Send approval buttons
-            approval_msg = await context.bot.send_message(
+            # Send approval buttons with receipt message ID
+            await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=f"فیش پرداخت از کاربر {user_id}",
                 reply_markup=approval_menu(user_id, receipt_msg.message_id)
