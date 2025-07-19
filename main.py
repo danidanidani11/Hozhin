@@ -1,90 +1,95 @@
 import os
 from flask import Flask, request
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.client.default import DefaultBotProperties
-import asyncio
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, InputFile
 
-# تنظیمات
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 5542927340
 WEBHOOK_URL = "https://hozhin.onrender.com/webhook"
 PDF_PATH = "books/hozhin_harman.pdf"
 
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher(storage=MemoryStorage())
+bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# دکمه‌های اصلی
+# 🛠️ منوی اصلی
 def main_menu():
-    keyboard = [
-        [InlineKeyboardButton(text="🛒 خرید کتاب", callback_data="buy")],
-        [InlineKeyboardButton(text="📖 درباره کتاب", callback_data="about_book")],
-        [InlineKeyboardButton(text="👤 درباره نویسنده", callback_data="about_author")],
-        [InlineKeyboardButton(text="💬 انتقادات و پیشنهادات", callback_data="feedback")],
-        [InlineKeyboardButton(text="🎧 کتاب صوتی (درحال توسعه)", callback_data="audio")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("🛒 خرید کتاب", callback_data="buy"))
+    markup.add(InlineKeyboardButton("📖 درباره کتاب", callback_data="about"))
+    markup.add(InlineKeyboardButton("👤 درباره نویسنده", callback_data="author"))
+    markup.add(InlineKeyboardButton("💬 ارسال نظر", callback_data="feedback"))
+    markup.add(InlineKeyboardButton("🎧 کتاب صوتی (بزودی)", callback_data="audio"))
+    return markup
 
-# استارت
-@dp.message(F.text == "/start")
-async def start(msg: Message):
-    await msg.answer("سلام! به ربات رسمی کتاب هوژین حرمان خوش آمدید.", reply_markup=main_menu())
+# /start
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(
+        message.chat.id,
+        "سلام! به ربات هوژین حرمان خوش آمدید.\nلطفاً یکی از گزینه‌ها را انتخاب کنید:",
+        reply_markup=main_menu()
+    )
 
-# کالبک‌ها
-@dp.callback_query(F.data == "buy")
-async def buy(cb: CallbackQuery):
-    await cb.message.answer("لطفاً مبلغ را به شماره کارت زیر واریز کرده و رسید را ارسال نمایید:\n\n💳 6037-9917-1234-5678\n\nبعد از ارسال، رسید شما توسط ادمین بررسی خواهد شد.")
-    await cb.answer()
+# دکمه‌ها
+@bot.callback_query_handler(func=lambda c: True)
+def callback(c):
+    data = c.data
+    if data == "buy":
+        bot.send_message(c.message.chat.id, "💳 لطفاً رسید پرداخت را ارسال کنید (عکس یا فایل).")
+    elif data == "about":
+        bot.send_message(c.message.chat.id, "📖 درباره کتاب: ...")
+    elif data == "author":
+        bot.send_message(c.message.chat.id, "👤 درباره نویسنده: ...")
+    elif data == "feedback":
+        bot.send_message(c.message.chat.id, "✍️ لطفاً نظر خود را ارسال نمایید.")
+    elif data == "audio":
+        bot.send_message(c.message.chat.id, "🔊 کتاب صوتی بزودی فعال خواهد شد.")
+    bot.answer_callback_query(c.id)
 
-@dp.callback_query(F.data == "about_book")
-async def about_book(cb: CallbackQuery):
-    await cb.message.answer("📘 کتاب هوژین حرمان روایت‌گر داستانی از دل احساس و منطق است...\n(اطلاعات بیشتر قرار دهید)")
-    await cb.answer()
+# دریافت رسید یا نظر
+@bot.message_handler(content_types=['text', 'photo', 'document'])
+def handle_message(message):
+    if message.chat.id == ADMIN_ID:
+        return
+    user = message.from_user
+    info = f"🧾 پیام جدید از {user.full_name} (ID: {user.id})"
+    if message.content_type == 'text':
+        bot.send_message(ADMIN_ID, f"{info}\n\n💬 {message.text}")
+    elif message.content_type == 'photo':
+        bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=info)
+    elif message.content_type == 'document':
+        bot.send_document(ADMIN_ID, message.document.file_id, caption=info)
+    bot.send_message(message.chat.id, "✅ پیام شما برای ادمین ارسال شد.")
 
-@dp.callback_query(F.data == "about_author")
-async def about_author(cb: CallbackQuery):
-    await cb.message.answer("✍️ نویسنده: فلانی\nمتولد ...، دارای آثار متعدد در حوزه ادبیات معاصر.")
-    await cb.answer()
+# 🌟 فرمان ارسال کتاب توسط ادمین
+@bot.message_handler(commands=['sendbook'])
+def sendbook(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    parts = message.text.split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        bot.reply_to(message, "فرمت اشتباه. مثال صحیح:\n/sendbook 12345678")
+        return
+    user_id = int(parts[1])
+    if not os.path.exists(PDF_PATH):
+        bot.reply_to(message, "فایل کتاب موجود نیست.")
+        return
+    bot.send_document(user_id, InputFile(PDF_PATH))
+    bot.reply_to(message, "✅ کتاب ارسال شد.")
 
-@dp.callback_query(F.data == "feedback")
-async def feedback(cb: CallbackQuery):
-    await cb.message.answer("لطفاً نظرات، انتقادات یا پیشنهادات خود را همین‌جا ارسال کنید.")
-    await cb.answer()
+# 🧷 ویـب هوک (Flask endpoint)
+@app.route('/')
+def home():
+    return 'ربات فعال است'
 
-@dp.callback_query(F.data == "audio")
-async def audio(cb: CallbackQuery):
-    await cb.message.answer("🔊 نسخه صوتی کتاب در حال آماده‌سازی است و به‌زودی در دسترس قرار می‌گیرد.")
-    await cb.answer()
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    json_str = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return '', 200
 
-# دریافت پیام‌های متنی و فایل (برای رسید خرید یا فیدبک)
-@dp.message(F.content_type.in_({'text', 'photo', 'document'}))
-async def handle_any(msg: Message):
-    if str(msg.from_user.id) == str(ADMIN_ID):
-        await msg.answer("ادمین عزیز پیام شما دریافت شد.")
-    else:
-        await bot.send_message(ADMIN_ID, f"📥 پیام جدید از کاربر:\n\nنام: {msg.from_user.full_name}\nآی‌دی: {msg.from_user.id}")
-        if msg.text:
-            await bot.send_message(ADMIN_ID, f"📨 پیام:\n{msg.text}")
-        elif msg.photo or msg.document:
-            file_id = msg.photo[-1].file_id if msg.photo else msg.document.file_id
-            await bot.send_message(ADMIN_ID, "🖼 رسید پرداخت:")
-            await bot.copy_message(chat_id=ADMIN_ID, from_chat_id=msg.chat.id, message_id=msg.message_id)
-        await msg.answer("✅ پیام یا رسید شما ارسال شد و پس از بررسی ادمین، پاسخ داده خواهد شد.")
-
-# Webhook endpoint
-@app.post("/webhook")
-async def webhook():
-    update = types.Update.model_validate(request.json)
-    await dp.feed_update(bot, update)
-    return "ok"
-
-# راه‌اندازی وب‌هوک هنگام اجرا
-async def on_startup():
-    await bot.set_webhook(WEBHOOK_URL)
-
-if __name__ == "__main__":
-    asyncio.run(on_startup())
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+if __name__ == '__main__':
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL)
+    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 10000)))
