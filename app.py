@@ -14,7 +14,7 @@ CHANNEL_USERNAME = "fromheartsoul"
 
 app = Flask(__name__)
 
-users_payment = {}  # ذخیره وضعیت پرداخت کاربران
+users_payment = {}  # Store user payment status
 user_waiting_for_receipt = set()
 
 ABOUT_BOOK_TEXT = """
@@ -110,78 +110,70 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     text = update.message.text if update.message.text else ""
+    receipt_file_id = None
 
     if user_id in user_waiting_for_receipt:
-        # دریافت فیش (عکس یا سند)
+        # Handle receipt (text, photo, or document)
         if update.message.photo:
             receipt_file_id = update.message.photo[-1].file_id
-            file_type = "photo"
         elif update.message.document:
             receipt_file_id = update.message.document.file_id
-            file_type = "document"
         else:
-            receipt_file_id = None
-            file_type = "text"
+            receipt_file_id = text  # Store text as receipt if no photo or document
 
+        # Update users_payment dictionary
         users_payment[user_id] = {
             "status": "pending",
-            "receipt": receipt_file_id if receipt_file_id else text,
+            "receipt": receipt_file_id,
             "username": user.username or user.first_name,
-            "file_type": file_type,
-            "user_message_id": update.message.message_id
         }
         user_waiting_for_receipt.remove(user_id)
 
-        # ارسال فیش به ادمین برای تایید یا رد
-        if file_type == "photo":
-            sent_msg = await context.bot.send_photo(
+        # Send receipt to admin for approval/rejection
+        if update.message.photo:
+            await context.bot.send_photo(
                 chat_id=ADMIN_ID,
                 photo=receipt_file_id,
                 caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
-                reply_markup=InlineKeyboardMarkup([
-                    [
+                reply_markup=InlineKeyboardMarkup(
+                    [[
                         InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
                         InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                    ]
-                ])
+                    ]]
+                )
             )
-        elif file_type == "document":
-            sent_msg = await context.bot.send_document(
+        elif update.message.document:
+            await context.bot.send_document(
                 chat_id=ADMIN_ID,
                 document=receipt_file_id,
                 caption=f"فیش پرداختی از @{user.username or user.first_name} (ID: {user_id})",
-                reply_markup=InlineKeyboardMarkup([
-                    [
+                reply_markup=InlineKeyboardMarkup(
+                    [[
                         InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
                         InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                    ]
-                ])
+                    ]]
+                )
             )
         else:
-            sent_msg = await context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=f"فیش پرداختی متنی از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
-                reply_markup=InlineKeyboardMarkup([
-                    [
+                reply_markup=InlineKeyboardMarkup(
+                    [[
                         InlineKeyboardButton("تایید ✅", callback_data=f"approve_{user_id}"),
                         InlineKeyboardButton("رد ❌", callback_data=f"reject_{user_id}")
-                    ]
-                ])
+                    ]]
+                )
             )
-        
-        # ذخیره اطلاعات پیام ارسال شده به ادمین
-        users_payment[user_id]["admin_message_id"] = sent_msg.message_id
-        
         await update.message.reply_text("فیش شما دریافت شد و در حال بررسی است. لطفا شکیبا باشید.")
         return
 
-    # بخش انتقادات و پیشنهادات
-    if text and text.strip():
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
-        )
-        await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
+    # Handle feedback (send to admin)
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=f"پیام از @{user.username or user.first_name} (ID: {user_id}):\n\n{text}",
+    )
+    await update.message.reply_text("پیام شما به ادمین ارسال شد. ممنون از نظرتون!")
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -194,46 +186,31 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     if data.startswith("approve_") or data.startswith("reject_"):
-        action, user_id = data.split("_")[:2]
-        user_id = int(user_id)
-
+        user_id = int(data.split("_")[1])
         if user_id not in users_payment:
             await query.edit_message_text("کاربر یافت نشد یا فیش قبلا بررسی شده.")
             return
 
-        if action == "approve":
+        if data.startswith("approve_"):
             users_payment[user_id]["status"] = "approved"
             await query.edit_message_text(f"✅ پرداخت کاربر {user_id} تایید شد.")
 
             pdf_path = "books/hozhin_harman.pdf"
             if os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f:
-                    await context.bot.send_document(
-                        chat_id=user_id,
-                        document=InputFile(f, filename="hozhin_harman.pdf"),
-                        caption="پرداخت شما تایید شد. کتاب برای شما ارسال گردید. از خریدتان متشکریم! ❤️"
-                    )
+                    await context.bot.send_document(chat_id=user_id, document=InputFile(f, filename="hozhin_harman.pdf"))
+                await context.bot.send_message(chat_id=user_id, text="پرداخت شما تایید شد. کتاب برای شما ارسال گردید. از خریدتان متشکریم! ❤️")
             else:
-                await context.bot.send_message(
-                    chat_id=ADMIN_ID,
-                    text="⚠️ فایل کتاب در سرور موجود نیست! لطفا بررسی کنید."
-                )
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text="متأسفانه مشکلی در ارسال کتاب پیش آمده. لطفا با پشتیبانی تماس بگیرید."
-                )
+                await context.bot.send_message(chat_id=ADMIN_ID, text="فایل کتاب در سرور موجود نیست!")
+                await context.bot.send_message(chat_id=user_id, text="خطایی در ارسال فایل رخ داد. لطفا با پشتیبانی تماس بگیرید.")
 
-        else:
+        else:  # reject
             users_payment[user_id]["status"] = "rejected"
             await query.edit_message_text(f"❌ پرداخت کاربر {user_id} رد شد.")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text="پرداخت شما تایید نشد. لطفا دوباره فیش واریزی را ارسال کنید یا با پشتیبانی تماس بگیرید."
-            )
+            await context.bot.send_message(chat_id=user_id, text="پرداخت شما تایید نشد. لطفا دوباره فیش را ارسال کنید یا با پشتیبانی تماس بگیرید.")
 
-        # حذف کاربر از لیست pending
-        if user_id in users_payment:
-            del users_payment[user_id]
+        # Clean up users_payment after processing
+        del users_payment[user_id]
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("دستور ناشناخته. لطفا از منوی اصلی استفاده کنید.")
@@ -243,14 +220,12 @@ def run_app():
     app.application = application
     app.bot = application.bot
 
-    # handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(CallbackQueryHandler(button_handler, pattern="^(buy|feedback|about_book|about_author|audiobook)$"))
     application.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), message_handler))
-    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern=r"^(approve|reject)_\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_|reject_)"))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # run flask and bot in parallel
     import threading
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
 
