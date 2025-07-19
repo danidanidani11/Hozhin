@@ -101,7 +101,14 @@ def about_book(message):
 
 @bot.message_handler(func=lambda msg: msg.text == "✍️ درباره نویسنده")
 def about_author(message):
-    bot.send_message(message.chat.id, "👤 نویسنده این اثر...")
+    text = (
+        "👤 *درباره نویسنده:*\n\n"
+        "نویسنده‌ی کتاب «هوژین حرمان» با دغدغه‌ٔ بیان احساسات انسانی و بازتاب رنج‌ها و امیدهای انسان معاصر، "
+        "اثری تأثیرگذار و دلنشین خلق کرده است.\n"
+        "برای دنبال‌کردن آثار بیشتر، به کانال ما سر بزنید:\n"
+        f"📚 [@{CHANNEL_USERNAME}](https://t.me/{CHANNEL_USERNAME})"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda msg: msg.text == "🔊 کتاب صوتی (بزودی)")
 def audio_book(message):
