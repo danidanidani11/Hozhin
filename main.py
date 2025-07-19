@@ -79,13 +79,20 @@ def handle_approval(call):
 @bot.message_handler(func=lambda msg: msg.text == "🗣️ انتقادات و پیشنهادات")
 def suggestions(message):
     user_state[message.chat.id] = 'awaiting_feedback'
-    bot.send_message(message.chat.id, "لطفاً نظر یا انتقاد خود را بنویسید:")
+    bot.send_message(
+        message.chat.id,
+        "✍️ لطفاً نظر، پیشنهاد یا انتقاد خود را ارسال کنید.\nپیام شما فقط توسط ادمین خوانده می‌شود."
+    )
 
 @bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_feedback')
 def receive_feedback(message):
     user_state.pop(message.chat.id)
-    bot.send_message(ADMIN_ID, f"📩 پیام از {message.from_user.id}:\n\n{message.text}")
-    bot.send_message(message.chat.id, "✅ پیام شما ارسال شد. ممنون از همراهی‌تان.")
+    bot.send_message(
+        ADMIN_ID,
+        f"📩 *پیام جدید از کاربر* [{message.from_user.first_name}](tg://user?id={message.from_user.id}):\n\n{message.text}",
+        parse_mode="Markdown"
+    )
+    bot.send_message(message.chat.id, "✅ پیام شما با موفقیت برای ادمین ارسال شد. سپاس از همراهی شما.")
 
 # --- درباره کتاب و نویسنده ---
 @bot.message_handler(func=lambda msg: msg.text == "ℹ️ درباره کتاب")
