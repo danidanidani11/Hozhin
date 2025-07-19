@@ -72,21 +72,21 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     if query.data == "buy":
-        await query.message.reply_text(TEXTS['buy'])
+        await query.edit_message_text(TEXTS['buy'])
         context.user_data['state'] = 'waiting_receipt'
     
     elif query.data == "suggestion":
-        await query.message.reply_text(TEXTS['suggestion'])
+        await query.edit_message_text(TEXTS['suggestion'])
         context.user_data['state'] = 'waiting_suggestion'
     
     elif query.data == "about_book":
-        await query.message.reply_text(TEXTS['about_book'], reply_markup=main_menu())
+        await query.edit_message_text(TEXTS['about_book'], reply_markup=main_menu())
     
     elif query.data == "about_author":
-        await query.message.reply_text(TEXTS['about_author'], reply_markup=main_menu())
+        await query.edit_message_text(TEXTS['about_author'], reply_markup=main_menu())
     
     elif query.data == "audio_book":
-        await query.message.reply_text(TEXTS['audio'], reply_markup=main_menu())
+        await query.edit_message_text(TEXTS['audio'], reply_markup=main_menu())
     
     elif query.data.startswith("approve_"):
         _, user_id, msg_id = query.data.split('_')
@@ -99,7 +99,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=TEXTS['payment_approved']
                     )
             await context.bot.delete_message(chat_id=ADMIN_ID, message_id=int(msg_id))
-            await query.message.reply_text(f"✅ پرداخت کاربر {user_id} تأیید شد")
+            await query.edit_message_text(f"✅ پرداخت کاربر {user_id} تأیید شد")
         except Exception as e:
             logger.error(f"خطا در تأیید پرداخت: {e}")
     
@@ -111,7 +111,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=TEXTS['payment_rejected']
             )
             await context.bot.delete_message(chat_id=ADMIN_ID, message_id=int(msg_id))
-            await query.message.reply_text(f"❌ پرداخت کاربر {user_id} رد شد")
+            await query.edit_message_text(f"❌ پرداخت کاربر {user_id} رد شد")
         except Exception as e:
             logger.error(f"خطا در رد پرداخت: {e}")
 
@@ -159,10 +159,12 @@ def index():
 def run_bot():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(application.bot.set_webhook(f'https://YOUR_DOMAIN.com/{TOKEN}'))
-    loop.close()
+    try:
+        loop.run_until_complete(application.initialize())
+        loop.run_until_complete(application.bot.set_webhook(f'https://YOUR_DOMAIN.com/{TOKEN}'))
+    finally:
+        loop.close()
 
 if __name__ == '__main__':
     run_bot()
-    app.run(host='0.0.0.0', port=10000, debug=False)
+    app.run(host='0.0.0.0', port=10000, debug=False, use_reloader=False)
