@@ -8,7 +8,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
     ContextTypes,
-    Dispatcher,
 )
 import asyncio
 
@@ -171,7 +170,8 @@ bot_app.add_handler(CommandHandler("reject", reject))
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
     update = Update.de_json(request.get_json(), bot_app.bot)
-    await bot_app.process_update(update)
+    if update:
+        await bot_app.process_update(update)
     return {"status": "ok"}
 
 # مسیر اصلی برای بررسی سرور
@@ -185,7 +185,8 @@ async def set_webhook():
 
 if __name__ == "__main__":
     # تنظیم وب‌هوک در هنگام شروع
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     loop.run_until_complete(set_webhook())
     
     # اجرای اپلیکیشن Flask
