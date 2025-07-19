@@ -210,9 +210,11 @@ async def initialize():
     await set_webhook()
 
 # اجرای اولیه هنگام شروع
-@app.before_first_request
+@app.before_request
 async def before_first_request():
-    await initialize()
+    if not hasattr(app, 'initialized'):
+        await initialize()
+        app.initialized = True
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
