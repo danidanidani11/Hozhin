@@ -12,25 +12,26 @@ from telegram.ext import (
 )
 import asyncio
 
-# تنظیم لاگ‌گیری
+# Configure logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# تنظیمات اولیه
+# Basic settings
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 5542927340
 CHANNEL_USERNAME = "@fromheartsoul"
 PDF_FILE_PATH = "hozhin_harman.pdf"
 
-# ایجاد اپلیکیشن Flask
+# Create Flask app
 app = Flask(__name__)
 
-# ایجاد اپلیکیشن تلگرام به صورت گلوبال
+# Create Telegram application
 bot_app = Application.builder().token(TOKEN).build()
 
-# متن‌های بخش‌های مختلف
+# Texts for different sections
 BUY_BOOK_TEXT = """لطفا فیش پرداخت را همینجا ارسال کنید تا مورد تأیید قرار بگیرد.
 هزینه کتاب ۱۱۰ هزارتومان است.
 شماره کارت: **5859 8311 3314 0268**
@@ -53,7 +54,7 @@ ABOUT_AUTHOR_TEXT = """سلام رفقا 🙋🏻‍♂
 
 AUDIO_BOOK_TEXT = "این بخش به زودی فعال می‌شود."
 
-# منوی اصلی
+# Main menu
 def main_menu():
     keyboard = [
         [InlineKeyboardButton("📚 خرید کتاب", callback_data="buy_book")],
@@ -64,13 +65,13 @@ def main_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# هندلر شروع
+# Start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     welcome_text = f"سلام {user.first_name}!\nبه بات هوژین و حرمان خوش آمدید. 😊\nلطفاً از منوی زیر یکی از گزینه‌ها را انتخاب کنید:"
     await update.message.reply_text(welcome_text, reply_markup=main_menu())
 
-# هندلر دکمه‌ها
+# Button handler
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -88,7 +89,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "audio_book":
         await query.message.reply_text(AUDIO_BOOK_TEXT, reply_markup=main_menu())
 
-# هندلر پیام‌ها
+# Message handler
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
@@ -123,7 +124,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data["state"] = None
 
-# هندلر تأیید فیش
+# Payment approval handler
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("شما دسترسی به این دستور ندارید.")
@@ -144,7 +145,7 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (IndexError, ValueError):
         await update.message.reply_text("لطفاً دستور را به درستی وارد کنید. مثال: /approve_123456")
 
-# هندلر رد فیش
+# Payment rejection handler
 async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("شما دسترسی به این دستور ندارید.")
@@ -161,7 +162,7 @@ async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (IndexError, ValueError):
         await update.message.reply_text("لطفاً دستور را به درستی وارد کنید. مثال: /reject_123456")
 
-# افزودن هندلرها
+# Add handlers
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(button))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
@@ -169,7 +170,7 @@ bot_app.add_handler(MessageHandler(filters.PHOTO, handle_message))
 bot_app.add_handler(CommandHandler("approve", approve))
 bot_app.add_handler(CommandHandler("reject", reject))
 
-# مسیر وب‌هوک
+# Webhook route
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
     try:
@@ -190,7 +191,7 @@ async def webhook():
         logger.error(f"Error in webhook: {str(e)}")
         return {"status": "error", "message": str(e)}, 500
 
-# تنظیم وب‌هوک
+# Set webhook
 async def set_webhook():
     webhook_url = f"https://hozhin.onrender.com/{TOKEN}"
     try:
@@ -199,19 +200,19 @@ async def set_webhook():
     except Exception as e:
         logger.error(f"Failed to set webhook: {str(e)}")
 
-# مسیر اصلی برای بررسی سرور
+# Main route
 @app.route("/")
 def index():
     return "Telegram Bot is running!"
 
-# راه‌اندازی اولیه
+# Initialize function
 async def initialize():
     await bot_app.initialize()
     await set_webhook()
 
-# اجرای اولیه هنگام شروع
+# Run initialization when app starts
 @app.before_request
-async def before_first_request():
+async def handle_initialization():
     if not hasattr(app, 'initialized'):
         await initialize()
         app.initialized = True
