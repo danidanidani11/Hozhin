@@ -118,7 +118,13 @@ def about_author(message):
 
 @bot.message_handler(func=lambda msg: msg.text == "🔊 کتاب صوتی (بزودی)")
 def audio_book(message):
-    bot.send_message(message.chat.id, "🔊 نسخه صوتی کتاب در حال آماده‌سازی است. به زودی منتشر خواهد شد.")
+    bot.send_message(
+        message.chat.id,
+        "🔊 نسخهٔ صوتی کتاب «هوژین حرمان» در حال ضبط و تدوین است.\n"
+        "به‌زودی از طریق همین ربات و کانال منتشر خواهد شد.\n"
+        f"🎧 ما را دنبال کنید: [@{CHANNEL_USERNAME}](https://t.me/{CHANNEL_USERNAME})",
+        parse_mode="Markdown"
+    )
 
 # --- Flask Webhook ---
 @app.route('/', methods=["POST"])
