@@ -1,3 +1,4 @@
+from aiogram import F
 import os
 from flask import Flask, request
 from aiogram import Bot, Dispatcher, types
