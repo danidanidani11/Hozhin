@@ -27,7 +27,7 @@ PDF_FILE_PATH = "hozhin_harman.pdf"
 # ایجاد اپلیکیشن Flask
 app = Flask(__name__)
 
-# ایجاد و مقداردهی اولیه اپلیکیشن تلگرام
+# ایجاد اپلیکیشن تلگرام به صورت گلوبال
 bot_app = Application.builder().token(TOKEN).build()
 
 # متن‌های بخش‌های مختلف
@@ -171,16 +171,16 @@ bot_app.add_handler(CommandHandler("reject", reject))
 
 # مسیر وب‌هوک
 @app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
+async def webhook():
     try:
         data = request.get_json()
         if not data:
             logger.error("No JSON data received in webhook")
             return {"status": "error", "message": "No JSON data"}, 400
+        
         update = Update.de_json(data, bot_app.bot)
         if update:
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(bot_app.process_update(update))
+            await bot_app.process_update(update)
             logger.info("Webhook processed successfully")
             return {"status": "ok"}
         else:
@@ -189,11 +189,6 @@ def webhook():
     except Exception as e:
         logger.error(f"Error in webhook: {str(e)}")
         return {"status": "error", "message": str(e)}, 500
-
-# مسیر اصلی برای بررسی سرور
-@app.route("/")
-def index():
-    return "Telegram Bot is running!"
 
 # تنظیم وب‌هوک
 async def set_webhook():
@@ -204,13 +199,21 @@ async def set_webhook():
     except Exception as e:
         logger.error(f"Failed to set webhook: {str(e)}")
 
-# مقداردهی اولیه و تنظیم وب‌هوک هنگام شروع
-def main():
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(bot_app.initialize())  # مقداردهی اولیه Application
-    loop.run_until_complete(set_webhook())
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+# مسیر اصلی برای بررسی سرور
+@app.route("/")
+def index():
+    return "Telegram Bot is running!"
+
+# راه‌اندازی اولیه
+async def initialize():
+    await bot_app.initialize()
+    await set_webhook()
+
+# اجرای اولیه هنگام شروع
+@app.before_first_request
+async def before_first_request():
+    await initialize()
 
 if __name__ == "__main__":
-    main()
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
