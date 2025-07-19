@@ -26,7 +26,7 @@ def get_main_keyboard():
 def start_handler(message):
     bot.send_message(
         message.chat.id,
-        "به ربات فروش کتاب «هوژین حرمان» خوش آمدید 🌸",
+        "به ربات فروش کتاب «هوژین و حرمان» خوش آمدید 🌸",
         reply_markup=get_main_keyboard()
     )
 
