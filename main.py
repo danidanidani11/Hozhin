@@ -45,7 +45,7 @@ async def handle_buttons(cb: types.CallbackQuery):
     await cb.answer()
 
 # دریافت فیش یا نظر
-@dp.message(types.ContentType.TEXT | types.ContentType.PHOTO | types.ContentType.DOCUMENT)
+@dp.message(F.content_type.in_({'text', 'photo', 'document'}))
 async def handle_user_msg(message: types.Message):
     await bot.forward_message(chat_id=ADMIN_ID, from_chat_id=message.chat.id, message_id=message.message_id)
     kb = InlineKeyboardMarkup(inline_keyboard=[
