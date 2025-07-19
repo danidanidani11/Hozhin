@@ -1,4 +1,5 @@
 import os
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -151,9 +152,10 @@ async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("لطفاً دستور را به درستی وارد کنید. مثال: /reject_123456")
 
 async def main():
+    # ایجاد اپلیکیشن
     app = Application.builder().token(TOKEN).build()
 
-    # هندلرها
+    # افزودن هندلرها
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
@@ -161,15 +163,27 @@ async def main():
     app.add_handler(CommandHandler("approve", approve))
     app.add_handler(CommandHandler("reject", reject))
 
-    # تنظیم وب‌هوک برای Render
+    # تنظیم وب‌هوک
     port = int(os.environ.get("PORT", 8443))
+    webhook_url = f"https://hozhin.onrender.com/{TOKEN}"
+    
+    # تنظیم وب‌هوک در تلگرام
+    await app.bot.set_webhook(url=webhook_url)
+    
+    # شروع اپلیکیشن
     await app.run_webhook(
         listen="0.0.0.0",
         port=port,
         url_path=TOKEN,
-        webhook_url=f"https://hozhin.onrender.com/{TOKEN}"
+        webhook_url=webhook_url
     )
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    # استفاده از حلقه رویداد موجود
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        # اگر حلقه در حال اجرا است، تسک را به آن اضافه می‌کنیم
+        loop.create_task(main())
+    else:
+        # اگر حلقه اجرا نمی‌شود، آن را اجرا می‌کنیم
+        loop.run_until_complete(main())
