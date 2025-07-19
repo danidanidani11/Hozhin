@@ -21,45 +21,9 @@ def get_main_keyboard():
     markup.add("🔊 کتاب صوتی (بزودی)")
     return markup
 
-# --- استارت ---
-@bot.message_handler(commands=['start'])
-def start_handler(message):
-    bot.send_message(
-        message.chat.id,
-        "به ربات فروش کتاب «هوژین و حرمان» خوش آمدید 🌸",
-        reply_markup=get_main_keyboard()
-    )
-
-# --- خرید کتاب ---
-@bot.message_handler(func=lambda msg: msg.text == "📖 خرید کتاب")
-def buy_book(message):
-    user_state[message.chat.id] = 'awaiting_receipt'
-    markup = types.ReplyKeyboardMarkup nhắc
-
-#System: It looks like your code was cut off after adding the "Back to Menu" button in the `buy_book` function. I'll complete the modification by adding the "Back to Menu" button and a handler for it, ensuring no other parts of the code are changed. Below is the full corrected code with the requested functionality:
-
-```python
-import os
-from flask import Flask, request
-import telebot
-from telebot import types
-
-TOKEN = '7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0'
-ADMIN_ID = 5542927340
-CHANNEL_USERNAME = 'fromheartsoul'
-PDF_PATH = 'books/hozhin_harman.pdf'
-
-bot = telebot.TeleBot(TOKEN)
-app = Flask(__name__)
-
-user_state = {}
-
-# --- دکمه‌ها ---
-def get_main_keyboard():
+def get_back_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📖 خرید کتاب", "🗣️ انتقادات و پیشنهادات")
-    markup.add("ℹ️ درباره کتاب", "✍️ درباره نویسنده")
-    markup.add("🔊 کتاب صوتی (بزودی)")
+    markup.add("🔙 بازگشت به منو")
     return markup
 
 # --- استارت ---
@@ -75,27 +39,16 @@ def start_handler(message):
 @bot.message_handler(func=lambda msg: msg.text == "📖 خرید کتاب")
 def buy_book(message):
     user_state[message.chat.id] = 'awaiting_receipt'
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("↩️ بازگشت به منو")
-    bot.send_message(message.chat.id, "لطفاً رسید پرداخت خود را ارسال کنید (عکس یا متن).", reply_markup=markup)
+    bot.send_message(message.chat.id, "لطفاً رسید پرداخت خود را ارسال کنید (عکس یا متن).", reply_markup=get_back_keyboard())
 
-# --- بازگشت به منو ---
-@bot.message_handler(func=lambda msg: msg.text == "↩️ بازگشت به منو")
+@bot.message_handler(func=lambda msg: msg.text == "🔙 بازگشت به منو")
 def back_to_menu(message):
     if message.chat.id in user_state:
         user_state.pop(message.chat.id)
-    bot.send_message(
-        message.chat.id,
-        "به منوی اصلی بازگشتید 🌸",
-        reply_markup=get_main_keyboard()
-    )
+    bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=get_main_keyboard())
 
-# --- رسید پرداخت ---
 @bot.message_handler(content_types=['text', 'photo'], func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_receipt')
 def handle_receipt(message):
-    if message.text == "↩️ بازگشت به منو":  # Handle "Back to Menu" in receipt state
-        back_to_menu(message)
-        return
     user_state.pop(message.chat.id)
 
     if message.content_type == 'photo':
@@ -136,13 +89,13 @@ def handle_approval(call):
 @bot.message_handler(func=lambda msg: msg.text == "🗣️ انتقادات و پیشنهادات")
 def suggestions(message):
     user_state[message.chat.id] = 'awaiting_feedback'
-    bot.send_message(message.chat.id, "لطفاً نظر یا انتقاد خود را بنویسید:")
+    bot.send_message(message.chat.id, "لطفاً نظر یا انتقاد خود را بنویسید:", reply_markup=get_back_keyboard())
 
 @bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_feedback')
 def receive_feedback(message):
     user_state.pop(message.chat.id)
     bot.send_message(ADMIN_ID, f"📩 پیام از {message.from_user.id}:\n\n{message.text}")
-    bot.send_message(message.chat.id, "✅ پیام شما ارسال شد. ممنون از همراهی‌تان.")
+    bot.send_message(message.chat.id, "✅ پیام شما ارسال شد. ممنون از همراهی‌تان.", reply_markup=get_main_keyboard())
 
 # --- درباره کتاب ---
 @bot.message_handler(func=lambda msg: msg.text == "ℹ️ درباره کتاب")
