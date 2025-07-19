@@ -1,5 +1,5 @@
 import os
-import asyncio
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -8,13 +8,18 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
     ContextTypes,
+    Dispatcher,
 )
+import asyncio
 
 # تنظیمات اولیه
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 5542927340
 CHANNEL_USERNAME = "@fromheartsoul"
 PDF_FILE_PATH = "hozhin_harman.pdf"  # مسیر فایل PDF کتاب
+
+# ایجاد اپلیکیشن Flask
+app = Flask(__name__)
 
 # متن‌های بخش‌های مختلف
 BUY_BOOK_TEXT = """لطفا فیش پرداخت را همینجا ارسال کنید تا مورد تأیید قرار بگیرد.
@@ -151,39 +156,38 @@ async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (IndexError, ValueError):
         await update.message.reply_text("لطفاً دستور را به درستی وارد کنید. مثال: /reject_123456")
 
-async def main():
-    # ایجاد اپلیکیشن
-    app = Application.builder().token(TOKEN).build()
+# تنظیم بات تلگرام
+bot_app = Application.builder().token(TOKEN).build()
 
-    # افزودن هندلرها
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_message))
-    app.add_handler(CommandHandler("approve", approve))
-    app.add_handler(CommandHandler("reject", reject))
+# افزودن هندلرها
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CallbackQueryHandler(button))
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+bot_app.add_handler(MessageHandler(filters.PHOTO, handle_message))
+bot_app.add_handler(CommandHandler("approve", approve))
+bot_app.add_handler(CommandHandler("reject", reject))
 
-    # تنظیم وب‌هوک
-    port = int(os.environ.get("PORT", 8443))
+# مسیر وب‌هوک
+@app.route(f"/{TOKEN}", methods=["POST"])
+async def webhook():
+    update = Update.de_json(request.get_json(), bot_app.bot)
+    await bot_app.process_update(update)
+    return {"status": "ok"}
+
+# مسیر اصلی برای بررسی سرور
+@app.route("/")
+def index():
+    return "Telegram Bot is running!"
+
+async def set_webhook():
     webhook_url = f"https://hozhin.onrender.com/{TOKEN}"
-    
-    # تنظیم وب‌هوک در تلگرام
-    await app.bot.set_webhook(url=webhook_url)
-    
-    # شروع اپلیکیشن
-    await app.run_webhook(
-        listen="0.0.0.0",
-        port=port,
-        url_path=TOKEN,
-        webhook_url=webhook_url
-    )
+    await bot_app.bot.set_webhook(url=webhook_url)
 
 if __name__ == "__main__":
-    # استفاده از حلقه رویداد موجود
+    # تنظیم وب‌هوک در هنگام شروع
     loop = asyncio.get_event_loop()
-    if loop.is_running():
-        # اگر حلقه در حال اجرا است، تسک را به آن اضافه می‌کنیم
-        loop.create_task(main())
-    else:
-        # اگر حلقه اجرا نمی‌شود، آن را اجرا می‌کنیم
-        loop.run_until_complete(main())
+    loop.run_until_complete(set_webhook())
+    
+    # اجرای اپلیکیشن Flask
+    port = int(os.environ.get("PORT", 8443))
+    app.run(host="0.0.0.0", port=port)
