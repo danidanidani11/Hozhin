@@ -38,26 +38,46 @@ def buy_book(message):
 
 @bot.message_handler(content_types=['text', 'photo'], func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_receipt')
 def handle_receipt(message):
+    # جلوگیری از ثبت دکمه‌های منو به عنوان فیش
+    main_buttons = [
+        "📖 خرید کتاب",
+        "🗣️ انتقادات و پیشنهادات",
+        "ℹ️ درباره کتاب",
+        "✍️ درباره نویسنده",
+        "🔊 کتاب صوتی (بزودی)"
+    ]
+
+    # اگر کاربر به جای فیش، روی یکی از گزینه‌های منو کلیک کرد
+    if message.content_type == 'text' and message.text in main_buttons:
+        bot.send_message(
+            message.chat.id,
+            "شما در حال ارسال رسید هستید. لطفاً ابتدا رسید پرداخت (عکس یا متن) را ارسال کنید، سپس ادامه دهید."
+        )
+        return  # این پیام رو به عنوان فیش نفرست
+
+    # حالا فقط اگر عکس یا متن آزاد بود، رسید رو بفرستیم
     user_state.pop(message.chat.id)
 
     if message.content_type == 'photo':
         file_id = message.photo[-1].file_id
         caption = message.caption or "رسید پرداخت"
-        sent = bot.send_photo(
-            ADMIN_ID, file_id, caption=f"{caption}\n\nاز طرف: {message.from_user.id}"
+        bot.send_photo(
+            ADMIN_ID, file_id,
+            caption=f"{caption}\n\nاز طرف: {message.from_user.id}"
         )
     else:
-        sent = bot.send_message(
+        bot.send_message(
             ADMIN_ID,
             f"رسید پرداخت از کاربر {message.from_user.id}:\n\n{message.text}"
         )
 
-    # دکمه تایید و رد برای ادمین
+    # دکمه تایید / رد برای ادمین
     markup = types.InlineKeyboardMarkup()
     markup.add(
         types.InlineKeyboardButton("✅ تایید", callback_data=f"approve_{message.chat.id}"),
         types.InlineKeyboardButton("❌ رد", callback_data=f"reject_{message.chat.id}")
     )
+
     bot.send_message(ADMIN_ID, "آیا رسید را تایید می‌کنید؟", reply_markup=markup)
     bot.send_message(message.chat.id, "رسید شما برای بررسی ارسال شد ✅")
 
