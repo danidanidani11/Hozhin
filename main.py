@@ -36,31 +36,30 @@ def buy_book(message):
     user_state[message.chat.id] = 'awaiting_receipt'
     bot.send_message(message.chat.id, "لطفاً رسید پرداخت خود را ارسال کنید (عکس یا متن).")
 
-@bot.message_handler(content_types=['text', 'photo'])
+@bot.message_handler(content_types=['text', 'photo'], func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_receipt')
 def handle_receipt(message):
-    if user_state.get(message.chat.id) == 'awaiting_receipt':
-        user_state.pop(message.chat.id)
+    user_state.pop(message.chat.id)
 
-        if message.content_type == 'photo':
-            file_id = message.photo[-1].file_id
-            caption = message.caption or "رسید پرداخت"
-            sent = bot.send_photo(
-                ADMIN_ID, file_id, caption=f"{caption}\n\nاز طرف: {message.from_user.id}"
-            )
-        else:
-            sent = bot.send_message(
-                ADMIN_ID,
-                f"رسید پرداخت از کاربر {message.from_user.id}:\n\n{message.text}"
-            )
-
-        # دکمه تایید و رد برای ادمین
-        markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton("✅ تایید", callback_data=f"approve_{message.chat.id}"),
-            types.InlineKeyboardButton("❌ رد", callback_data=f"reject_{message.chat.id}")
+    if message.content_type == 'photo':
+        file_id = message.photo[-1].file_id
+        caption = message.caption or "رسید پرداخت"
+        sent = bot.send_photo(
+            ADMIN_ID, file_id, caption=f"{caption}\n\nاز طرف: {message.from_user.id}"
         )
-        bot.send_message(ADMIN_ID, "آیا رسید را تایید می‌کنید؟", reply_markup=markup)
-        bot.send_message(message.chat.id, "رسید شما برای بررسی ارسال شد ✅")
+    else:
+        sent = bot.send_message(
+            ADMIN_ID,
+            f"رسید پرداخت از کاربر {message.from_user.id}:\n\n{message.text}"
+        )
+
+    # دکمه تایید و رد برای ادمین
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅ تایید", callback_data=f"approve_{message.chat.id}"),
+        types.InlineKeyboardButton("❌ رد", callback_data=f"reject_{message.chat.id}")
+    )
+    bot.send_message(ADMIN_ID, "آیا رسید را تایید می‌کنید؟", reply_markup=markup)
+    bot.send_message(message.chat.id, "رسید شما برای بررسی ارسال شد ✅")
 
 # --- پاسخ ادمین به تایید یا رد ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_") or call.data.startswith("reject_"))
@@ -101,6 +100,12 @@ def about_author(message):
 @bot.message_handler(func=lambda msg: msg.text == "🔊 کتاب صوتی (بزودی)")
 def audio_book(message):
     bot.send_message(message.chat.id, "این بخش بزودی فعال می‌شود")
+
+# --- Fallback handler for debugging ---
+@bot.message_handler(content_types=['text'])
+def handle_unmatched(message):
+    bot.send_message(message.chat.id, f"دستور نامعتبر: {message.text}. لطفاً از دکمه‌های منو استفاده کنید.")
+    bot.send_message(ADMIN_ID, f"پیام نامعتبر از {message.from_user.id}: {message.text}")
 
 # --- Flask Webhook ---
 @app.route('/', methods=["POST"])
