@@ -55,7 +55,7 @@ def handle_receipt(message):
     if message.content_type == 'text' and message.text in main_buttons:
         bot.send_message(
             message.chat.id,
-            "شما در حال ارسال رسید هستید. لطفاً ابتدا رسید پرداخت (عکس یا متن) را ارسال کنید، سپس ادامه دهید."
+            "شما در حال ارسال رسید هستید. لطفاً ابتدا رسید پرداخت (عکس یا متن) را ارسال کنید یا ربات را مجدد  /start کنید ، سپس ادامه دهید."
         )
         return  # این پیام رو به عنوان فیش نفرست
 
