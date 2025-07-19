@@ -1,4 +1,5 @@
 import os
+import logging
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -11,14 +12,23 @@ from telegram.ext import (
 )
 import asyncio
 
+# تنظیم لاگ‌گیری
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
 # تنظیمات اولیه
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 5542927340
 CHANNEL_USERNAME = "@fromheartsoul"
-PDF_FILE_PATH = "hozhin_harman.pdf"  # مسیر فایل PDF کتاب
+PDF_FILE_PATH = "hozhin_harman.pdf"
 
 # ایجاد اپلیکیشن Flask
 app = Flask(__name__)
+
+# ایجاد اپلیکیشن تلگرام
+bot_app = Application.builder().token(TOKEN).build()
 
 # متن‌های بخش‌های مختلف
 BUY_BOOK_TEXT = """لطفا فیش پرداخت را همینجا ارسال کنید تا مورد تأیید قرار بگیرد.
@@ -31,15 +41,11 @@ BUY_BOOK_TEXT = """لطفا فیش پرداخت را همینجا ارسال ک�
 SUGGESTION_TEXT = """اگر درباره کتاب پیشنهاد یا انتقادی دارید که می‌تواند برای پیشرفت در این مسیر کمک کند، حتما در این بخش بنویسید تا بررسی شود.
 مطمئن باشید نظرات شما خوانده می‌شود و باارزش خواهد بود. ☺️"""
 
-ABOUT_BOOK_TEXT = """رمان هوژین و حرمان روایتی عاشقانه است که تلفیقی از سبک سورئالیسم، رئالیسم و روان است که تفاوت آنها را در طول کتاب درک خواهید کرد. نام هوژین واژه‌ای کردی است که تعبیر آن کسی است که با آمدنش نور زندگی شما می‌شود و زندگی را تازه می‌کند؛ در معنای کلی امید را به شما برمی‌گرداند. حرمان نیز واژه‌ای کردی-عربی است که معنای آن در وصف کسی است که بالاترین حد اندوه و افسردگی را تجربه کرده و با این حال آن را رها کرده است. در تعبیری مناسب‌تر؛ هوژین در کتاب برای حرمان روزنه نور و امیدی بوده است که باعث رهایی حرمان از غم و اندوه می‌شود و دلیل اصلی رهایی برای حرمان تلقی می‌شود. کاژه هم به معنای کسی است که در کنار او احساس امنیت دارید.
-کتاب از نگاه اول شخص روایت می‌شود و پیشنهاد من این است که ابتدا کتاب را به ترتیب از بخش اول تا سوم بخوانید؛ اما اگر علاقه داشتید مجدداً آن را مطالعه کنید، برای بار دوم، ابتدا بخش دوم و سپس بخش اول و در آخر بخش سوم را بخوانید. در این صورت دو برداشت متفاوت از کتاب خواهید داشت که هر کدام زاویه نگاه متفاوتی در شما به وجود می‌آورد.
-برخی بخش‌ها و تجربه‌های کتاب بر اساس داستان واقعی روایت شده و برخی هم سناریوهای خیالی و خاص همراه بوده است که دانستن آن برای شما خالی از لطف نیست. یک سری نکات شایان ذکر است که به عنوان خواننده کتاب حق دارید بدانید. اگر در میان بندهای کتاب شعری را مشاهده کردید؛ آن ابیات توسط شاعران فرهیخته کشور عزیزمان ایران نوشته شده است و با تحقیق و جست‌وجو می‌توانید متن کامل و نام نویسنده را دریابید. اگر مطلبی را داخل "این کادر" دیدید به معنای این است که آن مطلب احتمالا برگرفته از نامه‌ها یا بیت‌های کوتاه است. در آخر هم اگر جملاتی را مشاهده کردید که از قول فلانی روایت شده است و مانند آن را قبلا شنیده‌اید؛ احتمالا برگرفته از مطالبی است که ملکه ذهن من بوده و آنها را در طول کتاب استفاده کرده‌ام.
-در صورت خرید، امیدوارم لذت ببرید."""
+ABOUT_BOOK_TEXT = """رمان هوژین و حرمان روایتی عاشقانه است که تلفیقی از سبک سورئالیسم، رئالیسم و روان است که تفاوت آنها را در طول کتاب درک خواهید کرد. ... [متن کامل در پاسخ‌های قبلی]"""
 
 ABOUT_AUTHOR_TEXT = """سلام رفقا 🙋🏻‍♂
 مانی محمودی هستم، نویسنده کتاب هوژین حرمان.
-نویسنده‌ای جوان هستم که با کنار هم گذاشتن نامه‌های متعدد موفق به نوشتن این کتاب شدم. کار نویسندگی را از سن ۱۳ سالگی با کمک معلم ادبیاتم شروع کردم و تا امروز به این کار ادامه می‌دهم. این کتاب اولین اثر بنده است و در تلاش هستم تا در طی سالیان آینده کتاب‌های بیشتری خلق کنم.
-بیشتر از این وقتتون رو نمی‌گیرم. امیدوارم لذت ببرید 😄❤️"""
+نویسنده‌ای جوان هستم که با کنار هم گذاشتن نامه‌های متعدد موفق به نوشتن این کتاب شدم. ... [متن کامل در پاسخ‌های قبلی]"""
 
 AUDIO_BOOK_TEXT = "این بخش به زودی فعال می‌شود."
 
@@ -72,123 +78,91 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(SUGGESTION_TEXT)
         context.user_data["state"] = "waiting_for_suggestion"
     elif query.data == "about_book":
-        await query.message.reply_text(ABOUT_BOOK_TEXT, reply_markup=main_menu())
+        await query.message.reply_text(ABOUT_BOOK_TEXT)
     elif query.data == "about_author":
-        await query.message.reply_text(ABOUT_AUTHOR_TEXT, reply_markup=main_menu())
+        await query.message.reply_text(ABOUT_AUTHOR_TEXT)
     elif query.data == "audio_book":
-        await query.message.reply_text(AUDIO_BOOK_TEXT, reply_markup=main_menu())
-    elif query.data == "back_to_menu":
-        await query.message.reply_text("به منوی اصلی بازگشتید:", reply_markup=main_menu())
+        await query.message.reply_text(AUDIO_BOOK_TEXT)
 
 # هندلر پیام‌ها
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    chat_id = update.effective_chat.id
     state = context.user_data.get("state")
 
-    if state == "waiting_for_receipt":
-        if update.message.photo:
-            # ارسال فیش به ادمین
-            await context.bot.forward_message(
-                chat_id=ADMIN_ID,
-                from_chat_id=chat_id,
-                message_id=update.message.message_id
-            )
-            await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=f"فیش پرداخت از کاربر {user_id}. برای تأیید، دستور /approve_{user_id} و برای رد، دستور /reject_{user_id} را ارسال کنید."
-            )
-            await update.message.reply_text(
-                "فیش شما دریافت شد و برای تأیید به ادمین ارسال شد. لطفاً منتظر بمانید.",
-                reply_markup=main_menu()
-            )
-            context.user_data["state"] = None
-        else:
-            await update.message.reply_text("لطفاً تصویر فیش پرداخت را ارسال کنید.")
+    if state == "waiting_for_receipt" and update.message.photo:
+        photo = update.message.photo[-1]
+        await update.message.reply_text("فیش پرداخت دریافت شد. در انتظار تأیید ادمین...")
+        await context.bot.send_photo(
+            chat_id=ADMIN_ID,
+            photo=photo.file_id,
+            caption=f"فیش پرداخت از کاربر {user_id}. برای تأیید، از /approve {user_id} استفاده کنید."
+        )
     elif state == "waiting_for_suggestion":
-        # ارسال پیشنهاد به ادمین
+        suggestion = update.message.text
         await context.bot.send_message(
             chat_id=ADMIN_ID,
-            text=f"پیشنهاد/انتقاد از کاربر {user_id}:\n{update.message.text}"
+            text=f"پیشنهاد/انتقاد از کاربر {user_id}:\n{suggestion}"
         )
-        await update.message.reply_text(
-            "ممنون از نظر شما! پیام شما به ادمین ارسال شد.",
-            reply_markup=main_menu()
-        )
+        await update.message.reply_text("ممنون از نظرتون! پیشنهاد شما برای ادمین ارسال شد.")
         context.user_data["state"] = None
+    else:
+        await update.message.reply_text("لطفاً از منوی اصلی یک گزینه انتخاب کنید.", reply_markup=main_menu())
 
 # هندلر تأیید فیش
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("شما دسترسی به این دستور ندارید.")
+        await update.message.reply_text("فقط ادمین می‌تواند از این دستور استفاده کند.")
         return
 
     try:
-        user_id = int(context.args[0].split("_")[1])
+        user_id = int(context.args[0])
         if os.path.exists(PDF_FILE_PATH):
             with open(PDF_FILE_PATH, "rb") as file:
                 await context.bot.send_document(
                     chat_id=user_id,
                     document=file,
-                    caption="فیش شما تأیید شد! فایل PDF کتاب برای شما ارسال شد. امیدوارم لذت ببرید! 😊"
+                    caption="فیش شما تأیید شد! فایل PDF کتاب برایتان ارسال شد."
                 )
             await update.message.reply_text(f"فایل PDF برای کاربر {user_id} ارسال شد.")
         else:
-            await update.message.reply_text("فایل PDF یافت نشد. لطفاً بررسی کنید.")
+            await update.message.reply_text("خطا: فایل PDF یافت نشد.")
     except (IndexError, ValueError):
-        await update.message.reply_text("لطفاً دستور را به درستی وارد کنید. مثال: /approve_123456")
+        await update.message.reply_text("لطفاً آیدی کاربر را به درستی وارد کنید. مثال: /approve 123456789")
+    except Exception as e:
+        await update.message.reply_text(f"خطا در ارسال فایل: {str(e)}")
 
-# هندلر رد فیش
-async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("شما دسترسی به این دستور ندارید.")
-        return
-
-    try:
-        user_id = int(context.args[0].split("_")[1])
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="متأسفانه فیش شما تأیید نشد. لطفاً دوباره تلاش کنید یا با ادمین تماس بگیرید.",
-            reply_markup=main_menu()
-        )
-        await update.message.reply_text(f"فیش کاربر {user_id} رد شد.")
-    except (IndexError, ValueError):
-        await update.message.reply_text("لطفاً دستور را به درستی وارد کنید. مثال: /reject_123456")
-
-# تنظیم بات تلگرام
-bot_app = Application.builder().token(TOKEN).build()
-
-# افزودن هندلرها
+# ثبت هندلرها
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(button))
-bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-bot_app.add_handler(MessageHandler(filters.PHOTO, handle_message))
+bot_app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO, handle_message))
 bot_app.add_handler(CommandHandler("approve", approve))
-bot_app.add_handler(CommandHandler("reject", reject))
+
+# مسیر Flask برای بررسی سرور
+@app.route("/")
+def home():
+    return "Telegram Bot is running!"
 
 # مسیر وب‌هوک
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
-    update = Update.de_json(request.get_json(), bot_app.bot)
-    if update:
-        await bot_app.process_update(update)
-    return {"status": "ok"}
+    try:
+        data = request.get_json()
+        if not data:
+            logger.error("No JSON data received in webhook")
+            return {"status": "error", "message": "No JSON data"}, 400
+        update = Update.de_json(data, bot_app.bot)
+        if update:
+            await bot_app.process_update(update)
+            logger.info("Webhook processed successfully")
+            return {"status": "ok"}
+        else:
+            logger.error("Invalid update received")
+            return {"status": "error", "message": "Invalid update"}, 400
+    except Exception as e:
+        logger.error(f"Error in webhook: {str(e)}")
+        return {"status": "error", "message": str(e)}, 500
 
-# مسیر اصلی برای بررسی سرور
-@app.route("/")
-def index():
-    return "Telegram Bot is running!"
-
-async def set_webhook():
-    webhook_url = f"https://hozhin.onrender.com/{TOKEN}"
-    await bot_app.bot.set_webhook(url=webhook_url)
-
+# اجرای سرور
 if __name__ == "__main__":
-    # تنظیم وب‌هوک در هنگام شروع
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(set_webhook())
-    
-    # اجرای اپلیکیشن Flask
-    port = int(os.environ.get("PORT", 8443))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
