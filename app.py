@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 5542927340
 CHANNEL_USERNAME = "@fromheartsoul"
-PDF_FILE_PATH = "/books/hozhin_harman.pdf"  # Updated path
+PDF_FILE_PATH = "/books/hozhin_harman.pdf"
 
 # Create Flask app
 app = Flask(__name__)
@@ -62,11 +62,11 @@ def main_menu():
     return InlineKeyboardMarkup(keyboard)
 
 # Approval menu for admin
-def approval_menu(user_id):
+def approval_menu(user_id, receipt_message_id):
     keyboard = [
         [
-            InlineKeyboardButton("✅ تایید پرداخت", callback_data=f"confirm_{user_id}"),
-            InlineKeyboardButton("❌ رد پرداخت", callback_data=f"reject_{user_id}")
+            InlineKeyboardButton("✅ تایید پرداخت", callback_data=f"confirm_{user_id}_{receipt_message_id}"),
+            InlineKeyboardButton("❌ رد پرداخت", callback_data=f"reject_{user_id}_{receipt_message_id}")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -77,10 +77,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = f"سلام {user.first_name}!\nبه بات هوژین و حرمان خوش آمدید. 😊\nلطفاً از منوی زیر یکی از گزینه‌ها را انتخاب کنید:"
     await update.message.reply_text(welcome_text, reply_markup=main_menu())
 
-# Button handler
+# Button handler with fix for double-click issue
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    # Edit message to prevent double-click
+    await query.edit_message_reply_markup(reply_markup=None)
 
     if query.data == "buy_book":
         await query.message.reply_text(BUY_BOOK_TEXT)
@@ -96,26 +99,47 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(AUDIO_BOOK_TEXT, reply_markup=main_menu())
     elif query.data.startswith("confirm_"):
         # Handle payment confirmation
-        user_id = int(query.data.split("_")[1])
-        if os.path.exists(PDF_FILE_PATH):
-            with open(PDF_FILE_PATH, "rb") as file:
-                await context.bot.send_document(
-                    chat_id=user_id,
-                    document=file,
-                    caption="فیش شما تأیید شد! فایل PDF کتاب برای شما ارسال شد. امیدوارم لذت ببرید! 😊"
+        _, user_id, receipt_message_id = query.data.split("_")
+        user_id = int(user_id)
+        
+        try:
+            if os.path.exists(PDF_FILE_PATH):
+                with open(PDF_FILE_PATH, "rb") as file:
+                    await context.bot.send_document(
+                        chat_id=user_id,
+                        document=file,
+                        caption="فیش شما تأیید شد! فایل PDF کتاب برای شما ارسال شد. امیدوارم لذت ببرید! 😊"
+                    )
+                await context.bot.delete_message(
+                    chat_id=ADMIN_ID,
+                    message_id=int(receipt_message_id)
                 )
-            await query.message.reply_text(f"فایل PDF برای کاربر {user_id} ارسال شد.")
-        else:
-            await query.message.reply_text("فایل PDF یافت نشد. لطفاً بررسی کنید.")
+                await query.message.reply_text(f"فایل PDF برای کاربر {user_id} ارسال شد.")
+            else:
+                await query.message.reply_text("فایل PDF یافت نشد. لطفاً بررسی کنید.")
+        except Exception as e:
+            logger.error(f"Error approving payment: {str(e)}")
+            await query.message.reply_text("خطا در ارسال فایل. لطفاً دوباره تلاش کنید.")
+            
     elif query.data.startswith("reject_"):
         # Handle payment rejection
-        user_id = int(query.data.split("_")[1])
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="متأسفانه فیش شما تأیید نشد. لطفاً دوباره تلاش کنید یا با ادمین تماس بگیرید.",
-            reply_markup=main_menu()
-        )
-        await query.message.reply_text(f"فیش کاربر {user_id} رد شد.")
+        _, user_id, receipt_message_id = query.data.split("_")
+        user_id = int(user_id)
+        
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="متأسفانه فیش شما تأیید نشد. لطفاً دوباره تلاش کنید یا با ادمین تماس بگیرید.",
+                reply_markup=main_menu()
+            )
+            await context.bot.delete_message(
+                chat_id=ADMIN_ID,
+                message_id=int(receipt_message_id)
+            )
+            await query.message.reply_text(f"فیش کاربر {user_id} رد شد.")
+        except Exception as e:
+            logger.error(f"Error rejecting payment: {str(e)}")
+            await query.message.reply_text("خطا در رد پرداخت. لطفاً دوباره تلاش کنید.")
 
 # Message handler
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -125,17 +149,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if state == "waiting_for_receipt":
         if update.message.photo:
-            # Forward receipt to admin with approval buttons
-            await context.bot.forward_message(
+            # Forward receipt to admin
+            receipt_msg = await context.bot.forward_message(
                 chat_id=ADMIN_ID,
                 from_chat_id=chat_id,
                 message_id=update.message.message_id
             )
-            await context.bot.send_message(
+            
+            # Send approval buttons
+            approval_msg = await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=f"فیش پرداخت از کاربر {user_id}",
-                reply_markup=approval_menu(user_id)
+                reply_markup=approval_menu(user_id, receipt_msg.message_id)
             )
+            
             await update.message.reply_text(
                 "فیش شما دریافت شد و برای تأیید به ادمین ارسال شد. لطفاً منتظر بمانید.",
                 reply_markup=main_menu()
