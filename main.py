@@ -12,26 +12,33 @@ CHANNEL_USERNAME = "fromheartsoul"
 
 app = Flask(__name__)
 bot = Bot(token=TOKEN)
-
 application = Application.builder().token(TOKEN).build()
 
 # ===== متن‌ها =====
-about_book = "📖 رمان هوژین و حرمان..."  # متن کامل اینجا قرار بگیره
-about_author = "✍️ سلام رفقا..."         # متن کامل اینجا قرار بگیره
-suggest_text = "🗣 اگر درباره کتاب پیشنهادی دارید..."
+about_book = """📖 رمان هوژین و حرمان...
+(اینجا متن کامل درباره کتاب بذار)"""
+about_author = """✍️ سلام رفقا...
+(اینجا متن کامل درباره نویسنده بذار)"""
+suggest_text = "🗣 اگر درباره کتاب پیشنهاد یا انتقادی دارید که می‌تواند برای پیشرفت کمک کند..."
 payment_text = """💳 5859 8311 3314 0268
 
-لطفا فیش را همینجا ارسال کنید...
+لطفا فیش را همینجا ارسال کنید. هزینه کتاب ۱۱۰ هزار تومان است.
+ممکن است تایید فیش کمی زمان‌بر باشد.
+در صورت تایید، فایل PDF برایتان ارسال خواهد شد.
 """
 
+# ===== صفحه اصلی
 def get_main_keyboard():
     buttons = [
         ["📘 خرید کتاب", "🗣 انتقادات و پیشنهادات"],
         ["📖 درباره کتاب", "✍️ درباره نویسنده"],
         ["🔊 کتاب صوتی (به زودی)"]
     ]
-    return InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data=text)] for row in buttons for text in row])
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(text, callback_data=text)] for row in buttons for text in row]
+    )
 
+# ===== وب‌هوک
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
@@ -42,14 +49,14 @@ async def webhook():
 def home():
     return "ربات فعال است."
 
-# ===== هندلر استارت =====
+# ===== دستور /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "به ربات هوژین حرمان خوش آمدید 🌿",
         reply_markup=get_main_keyboard()
     )
 
-# ===== هندلر دکمه‌ها =====
+# ===== کلیک روی دکمه‌ها
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
@@ -69,37 +76,37 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✅ فیش تایید شد و فایل ارسال شد.")
     elif data.startswith("رد_"):
         user_id = int(data.split("_")[1])
-        await bot.send_message(chat_id=user_id, text="❌ فیش ارسالی شما رد شد.")
+        await bot.send_message(chat_id=user_id, text="❌ فیش شما رد شد.")
         await query.edit_message_text("❌ فیش رد شد.")
 
-# ===== هندلر پیام =====
+# ===== پردازش پیام‌ها (فیش یا نظر)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
-    if update.message.photo or update.message.document or update.message.text:
-        caption = f"📥 فیش جدید از: {user.full_name} ({user.id})"
-        keyboard = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("✅ تایید", callback_data=f"تایید_{user.id}"),
-                InlineKeyboardButton("❌ رد", callback_data=f"رد_{user.id}")
-            ]
-        ])
-        if update.message.photo:
-            file_id = update.message.photo[-1].file_id
-            await bot.send_photo(chat_id=ADMIN_ID, photo=file_id, caption=caption, reply_markup=keyboard)
-        elif update.message.document:
-            await bot.send_document(chat_id=ADMIN_ID, document=update.message.document.file_id, caption=caption, reply_markup=keyboard)
-        elif update.message.text:
-            await bot.send_message(chat_id=ADMIN_ID, text=f"{caption}\n\n{update.message.text}", reply_markup=keyboard)
+    caption = f"📥 فیش جدید از {user.full_name} ({user.id})"
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ تایید", callback_data=f"تایید_{user.id}"),
+            InlineKeyboardButton("❌ رد", callback_data=f"رد_{user.id}")
+        ]
+    ])
 
-# ===== اتصال هندلرها =====
+    if update.message.photo:
+        file_id = update.message.photo[-1].file_id
+        await bot.send_photo(chat_id=ADMIN_ID, photo=file_id, caption=caption, reply_markup=keyboard)
+    elif update.message.document:
+        await bot.send_document(chat_id=ADMIN_ID, document=update.message.document.file_id, caption=caption, reply_markup=keyboard)
+    elif update.message.text:
+        await bot.send_message(chat_id=ADMIN_ID, text=f"{caption}\n\n{update.message.text}", reply_markup=keyboard)
+
+# ===== اتصال هندلرها
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(button_handler))
 application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
 
-# ===== اجرای ربات =====
+# ===== اجرای وب‌هوک
 if __name__ == "__main__":
     application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.environ.get('PORT', 10000)),
+        port=int(os.environ.get("PORT", 10000)),
         webhook_url=f"https://hozhin.onrender.com/{TOKEN}"
     )
