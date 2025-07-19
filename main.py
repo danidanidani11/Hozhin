@@ -1,147 +1,160 @@
 import os
 from flask import Flask, request
-import telebot
-from telebot import types
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.enums import ParseMode
+from aiogram.types import (
+    Message, InputFile, InlineKeyboardMarkup, InlineKeyboardButton,
+    ReplyKeyboardMarkup, KeyboardButton, CallbackQuery
+)
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.client.default import DefaultBotProperties
+from aiogram.utils.webhook import WebhookRequestHandler
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler
+import asyncio
 
-TOKEN = '7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0'
+# ===== تنظیمات شما =====
+TOKEN = "7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0"
 ADMIN_ID = 5542927340
-CHANNEL_USERNAME = 'fromheartsoul'
-PDF_PATH = 'books/hozhin_harman.pdf'
+WEBHOOK_URL = "https://hozhin.onrender.com"
+PDF_FILE_PATH = "books/hozhin_harman.pdf"
+CHANNEL_USERNAME = "fromheartsoul"
 
-bot = telebot.TeleBot(TOKEN)
+# ===== Flask برای Webhook =====
 app = Flask(__name__)
 
-user_state = {}
+# ===== Aiogram bot =====
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp = Dispatcher(storage=MemoryStorage())
 
-# --- دکمه‌ها ---
-def get_main_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📖 خرید کتاب", "🗣️ انتقادات و پیشنهادات")
-    markup.add("ℹ️ درباره کتاب", "✍️ درباره نویسنده")
-    markup.add("🔊 کتاب صوتی (بزودی)")
-    return markup
+# ===== منوی اصلی =====
+main_menu = ReplyKeyboardMarkup(resize_keyboard=True)
+main_menu.add(
+    KeyboardButton("📖 خرید کتاب"),
+    KeyboardButton("🗣️ انتقادات و پیشنهادات")
+)
+main_menu.add(
+    KeyboardButton("✍️ درباره نویسنده"),
+    KeyboardButton("ℹ️ درباره کتاب"),
+    KeyboardButton("🔊 کتاب صوتی (بزودی)")
+)
 
-# --- استارت ---
-@bot.message_handler(commands=['start'])
-def start_handler(message):
-    bot.send_message(
-        message.chat.id,
-        "به ربات فروش کتاب «هوژین و حرمان» خوش آمدید 🌸",
-        reply_markup=get_main_keyboard()
+# ===== حالت‌ها برای خرید کتاب =====
+class BuyBook(StatesGroup):
+    waiting_for_payment = State()
+
+# ===== استارت =====
+@dp.message(F.text == "/start")
+async def start_handler(message: Message):
+    await message.answer(
+        "📚 به ربات فروش کتاب «هوژین حرمان» خوش آمدید.\n"
+        "یکی از گزینه‌های زیر را انتخاب کنید:",
+        reply_markup=main_menu
     )
 
-# --- خرید کتاب ---
-@bot.message_handler(func=lambda msg: msg.text == "📖 خرید کتاب")
-def buy_book(message):
-    user_state[message.chat.id] = 'awaiting_receipt'
-    bot.send_message(message.chat.id, "لطفاً رسید پرداخت خود را ارسال کنید (عکس یا متن).")
+# ===== خرید کتاب =====
+@dp.message(F.text == "📖 خرید کتاب")
+async def buy_book(message: Message, state: FSMContext):
+    await state.set_state(BuyBook.waiting_for_payment)
+    await message.answer("💳 لطفاً رسید پرداخت خود را به صورت عکس یا متن ارسال کنید:")
 
-@bot.message_handler(content_types=['text', 'photo'])
-def handle_receipt(message):
-    if user_state.get(message.chat.id) == 'awaiting_receipt':
-        user_state.pop(message.chat.id)
+@dp.message(BuyBook.waiting_for_payment, F.photo | F.text | F.document)
+async def handle_payment(message: Message, state: FSMContext):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ تأیید", callback_data=f"approve_{message.from_user.id}"),
+            InlineKeyboardButton(text="❌ رد", callback_data=f"reject_{message.from_user.id}")
+        ]
+    ])
 
-        if message.content_type == 'photo':
-            file_id = message.photo[-1].file_id
-            caption = message.caption or "رسید پرداخت"
-            sent = bot.send_photo(
-                ADMIN_ID, file_id, caption=f"{caption}\n\nاز طرف: {message.from_user.id}"
-            )
-        else:
-            sent = bot.send_message(
-                ADMIN_ID,
-                f"رسید پرداخت از کاربر {message.from_user.id}:\n\n{message.text}"
-            )
-
-        # دکمه تایید و رد برای ادمین
-        markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton("✅ تایید", callback_data=f"approve_{message.chat.id}"),
-            types.InlineKeyboardButton("❌ رد", callback_data=f"reject_{message.chat.id}")
-        )
-        bot.send_message(ADMIN_ID, "آیا رسید را تایید می‌کنید؟", reply_markup=markup)
-        bot.send_message(message.chat.id, "رسید شما برای بررسی ارسال شد ✅")
-
-# --- پاسخ ادمین به تایید یا رد ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_") or call.data.startswith("reject_"))
-def handle_approval(call):
-    user_id = int(call.data.split("_")[1])
-    if call.data.startswith("approve_"):
-        bot.send_document(user_id, open(PDF_PATH, "rb"))
-        bot.send_message(user_id, "📘 خرید شما تایید شد. فایل کتاب برایتان ارسال شد.")
-        bot.send_message(ADMIN_ID, f"✅ فایل برای {user_id} ارسال شد.")
+    caption = f"💰 رسید پرداخت از کاربر @{message.from_user.username or '---'} (ID: {message.from_user.id})"
+    
+    if message.photo:
+        file_id = message.photo[-1].file_id
+        await bot.send_photo(ADMIN_ID, file_id, caption=caption, reply_markup=kb)
+    elif message.document:
+        await bot.send_document(ADMIN_ID, message.document.file_id, caption=caption, reply_markup=kb)
     else:
-        bot.send_message(user_id, "❌ رسید شما رد شد. لطفاً مجدد تلاش کنید.")
-        bot.send_message(ADMIN_ID, f"❌ رسید کاربر {user_id} رد شد.")
-    bot.answer_callback_query(call.id)
+        await bot.send_message(ADMIN_ID, f"{caption}\n\n📝 متن:\n{message.text}", reply_markup=kb)
 
-# --- انتقادات و پیشنهادات ---
-@bot.message_handler(func=lambda msg: msg.text == "🗣️ انتقادات و پیشنهادات")
-def suggestions(message):
-    user_state[message.chat.id] = 'awaiting_feedback'
-    bot.send_message(
-        message.chat.id,
-        "✍️ لطفاً نظر، پیشنهاد یا انتقاد خود را ارسال کنید.\nپیام شما فقط توسط ادمین خوانده می‌شود."
+    await message.answer("⏳ رسید شما برای ادمین ارسال شد. پس از بررسی، فایل برای شما ارسال خواهد شد.")
+    await state.clear()
+
+# ===== بررسی تأیید یا رد توسط ادمین =====
+@dp.callback_query(F.data.startswith("approve_"))
+async def approve_payment(callback: CallbackQuery):
+    user_id = int(callback.data.split("_")[1])
+    pdf = InputFile(PDF_FILE_PATH)
+    await bot.send_document(user_id, pdf, caption="📘 این هم فایل PDF کتاب «هوژین حرمان». مطالعه لذت‌بخشی داشته باشید.")
+    await callback.answer("✅ ارسال شد.")
+    await callback.message.edit_text("✅ رسید تأیید شد و فایل برای کاربر ارسال شد.")
+
+@dp.callback_query(F.data.startswith("reject_"))
+async def reject_payment(callback: CallbackQuery):
+    user_id = int(callback.data.split("_")[1])
+    await bot.send_message(user_id, "❌ پرداخت شما تأیید نشد. لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.")
+    await callback.answer("❌ رد شد.")
+    await callback.message.edit_text("❌ رسید رد شد و به کاربر اطلاع داده شد.")
+
+# ===== انتقادات و پیشنهادات =====
+feedback_waiting_users = set()
+
+@dp.message(F.text == "🗣️ انتقادات و پیشنهادات")
+async def feedback_start(message: Message):
+    feedback_waiting_users.add(message.chat.id)
+    await message.answer("✍️ لطفاً نظر یا پیشنهاد خود را بنویسید:")
+
+@dp.message(F.text & (lambda msg: msg.chat.id in feedback_waiting_users))
+async def feedback_receive(message: Message):
+    feedback_waiting_users.remove(message.chat.id)
+    admin_text = f"📩 پیام جدید از @{message.from_user.username or '---'}:\n\n{message.text}"
+    await bot.send_message(ADMIN_ID, admin_text)
+    await message.answer("✅ پیام شما برای ادمین ارسال شد. ممنون از همراهی شما.")
+
+# ===== درباره نویسنده =====
+@dp.message(F.text == "✍️ درباره نویسنده")
+async def about_author(message: Message):
+    await message.answer(
+        "👤 <b>درباره نویسنده:</b>\n\n"
+        "نویسنده‌ی کتاب «هوژین حرمان» با قلمی صمیمی، زندگی، عشق و رنج را در قالب داستانی عمیق به تصویر می‌کشد.\n"
+        f"📌 کانال رسمی: @{CHANNEL_USERNAME}"
     )
 
-@bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_feedback')
-def receive_feedback(message):
-    user_state.pop(message.chat.id)
-    bot.send_message(
-        ADMIN_ID,
-        f"📩 *پیام جدید از کاربر* [{message.from_user.first_name}](tg://user?id={message.from_user.id}):\n\n{message.text}",
-        parse_mode="Markdown"
-    )
-    bot.send_message(message.chat.id, "✅ پیام شما با موفقیت برای ادمین ارسال شد. سپاس از همراهی شما.")
-
-# --- درباره کتاب و نویسنده ---
-@bot.message_handler(func=lambda msg: msg.text == "ℹ️ درباره کتاب")
-def about_book(message):
-    text = (
-        "📖 *درباره کتاب «هوژین حرمان»:*\n\n"
-        "این کتاب روایتی شاعرانه از دردها، امیدها و حرمان‌های درونی یک روح عاشق است. "
-        "با نثری ادبی و دل‌نشین، مخاطب را به سفری درونی می‌برد.\n"
-        "برای خرید نسخه‌ی کامل، از گزینه‌ی «📖 خرید کتاب» استفاده کنید."
-    )
-    bot.send_message(message.chat.id, text, parse_mode="Markdown")
-
-@bot.message_handler(func=lambda msg: msg.text == "✍️ درباره نویسنده")
-def about_author(message):
-    text = (
-        "👤 *درباره نویسنده:*\n\n"
-        "نویسنده‌ی کتاب «هوژین حرمان» با دغدغه‌ٔ بیان احساسات انسانی و بازتاب رنج‌ها و امیدهای انسان معاصر، "
-        "اثری تأثیرگذار و دلنشین خلق کرده است.\n"
-        "برای دنبال‌کردن آثار بیشتر، به کانال ما سر بزنید:\n"
-        f"📚 [@{CHANNEL_USERNAME}](https://t.me/{CHANNEL_USERNAME})"
-    )
-    bot.send_message(message.chat.id, text, parse_mode="Markdown")
-
-@bot.message_handler(func=lambda msg: msg.text == "🔊 کتاب صوتی (بزودی)")
-def audio_book(message):
-    bot.send_message(
-        message.chat.id,
-        "🔊 نسخهٔ صوتی کتاب «هوژین حرمان» در حال ضبط و تدوین است.\n"
-        "به‌زودی از طریق همین ربات و کانال منتشر خواهد شد.\n"
-        f"🎧 ما را دنبال کنید: [@{CHANNEL_USERNAME}](https://t.me/{CHANNEL_USERNAME})",
-        parse_mode="Markdown"
+# ===== درباره کتاب =====
+@dp.message(F.text == "ℹ️ درباره کتاب")
+async def about_book(message: Message):
+    await message.answer(
+        "📖 <b>درباره کتاب:</b>\n\n"
+        "«هوژین حرمان» داستانی است از دل تاریکی، از میان رنج‌ها و امیدها. "
+        "این کتاب به زبان دل نوشته شده است و سفری درونی را روایت می‌کند.\n\n"
+        "📥 لینک فایل PDF:\n"
+        f"https://hozhin.onrender.com/books/hozhin_harman.pdf"
     )
 
-# --- Flask Webhook ---
-@app.route('/', methods=["POST"])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return '', 200
-    return '', 403
+# ===== کتاب صوتی =====
+@dp.message(F.text == "🔊 کتاب صوتی (بزودی)")
+async def audio_book_soon(message: Message):
+    await message.answer("🔊 نسخه صوتی کتاب «هوژین حرمان» به‌زودی در همین ربات منتشر خواهد شد. 🎧")
 
-@app.route('/')
+# ===== اجرای Webhook =====
+@app.route("/", methods=["POST"])
+async def webhook():
+    return await WebhookRequestHandler(dp).handle(request)
+
+@app.route("/", methods=["GET"])
 def index():
     return "ربات فعال است."
 
-if __name__ == '__main__':
-    import telebot
-    bot.remove_webhook()
-    bot.set_webhook(url='https://hozhin.onrender.com')
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+async def main():
+    await bot.set_webhook(WEBHOOK_URL)
+    print("📡 Webhook set!")
+
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.create_task(main())
+    from hypercorn.asyncio import serve
+    from hypercorn.config import Config
+    config = Config()
+    config.bind = ["0.0.0.0:10000"]
+    loop.run_until_complete(serve(app, config))
