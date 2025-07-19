@@ -252,7 +252,7 @@ def run_app():
 
     # run flask and bot in parallel
     import threading
-    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000))).start()
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))).start()
 
     application.run_polling()
 
