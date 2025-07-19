@@ -27,7 +27,7 @@ PDF_FILE_PATH = "hozhin_harman.pdf"
 # ایجاد اپلیکیشن Flask
 app = Flask(__name__)
 
-# ایجاد اپلیکیشن تلگرام
+# ایجاد و مقداردهی اولیه اپلیکیشن تلگرام
 bot_app = Application.builder().token(TOKEN).build()
 
 # متن‌های بخش‌های مختلف
@@ -179,7 +179,8 @@ def webhook():
             return {"status": "error", "message": "No JSON data"}, 400
         update = Update.de_json(data, bot_app.bot)
         if update:
-            asyncio.run(bot_app.process_update(update))
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(bot_app.process_update(update))
             logger.info("Webhook processed successfully")
             return {"status": "ok"}
         else:
@@ -203,10 +204,13 @@ async def set_webhook():
     except Exception as e:
         logger.error(f"Failed to set webhook: {str(e)}")
 
-# اجرای وب‌هوک هنگام شروع
-if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+# مقداردهی اولیه و تنظیم وب‌هوک هنگام شروع
+def main():
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(bot_app.initialize())  # مقداردهی اولیه Application
     loop.run_until_complete(set_webhook())
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
+if __name__ == "__main__":
+    main()
