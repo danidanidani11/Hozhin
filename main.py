@@ -84,21 +84,23 @@ def suggestions(message):
 @bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_feedback')
 def receive_feedback(message):
     user_state.pop(message.chat.id)
-    bot.send_message(ADMIN_ID, f"📩 پیام از کاربر {message.from_user.id}:\n\n{message.text}")
-    bot.send_message(message.chat.id, "✅ پیام شما با موفقیت ارسال شد. از بازخورد شما متشکریم!")
+    bot.send_message(ADMIN_ID, f"📩 پیام از {message.from_user.id}:\n\n{message.text}")
+    bot.send_message(message.chat.id, "✅ پیام شما ارسال شد. ممنون از همراهی‌تان.")
 
-# --- درباره کتاب و نویسنده ---
+# --- درباره کتاب ---
 @bot.message_handler(func=lambda msg: msg.text == "ℹ️ درباره کتاب")
 def about_book(message):
-    bot.send_message(message.chat.id, "📖 کتاب «هوژین حرمان» روایتگر داستان... (متن کامل درباره کتاب را اینجا قرار دهید)")
+    bot.send_message(message.chat.id, "هوژین و حرمان")
 
+# --- درباره نویسنده ---
 @bot.message_handler(func=lambda msg: msg.text == "✍️ درباره نویسنده")
 def about_author(message):
-    bot.send_message(message.chat.id, "👤 سلاااام\nنویسنده کتاب «هوژین حرمان»... (متن کامل درباره نویسنده را اینجا قرار دهید)")
+    bot.send_message(message.chat.id, "سلاااام")
 
+# --- کتاب صوتی ---
 @bot.message_handler(func=lambda msg: msg.text == "🔊 کتاب صوتی (بزودی)")
 def audio_book(message):
-    bot.send_message(message.chat.id, "🔊 نسخه صوتی کتاب در حال آماده‌سازی است و به زودی منتشر خواهد شد. از صبر شما متشکریم!")
+    bot.send_message(message.chat.id, "این بخش بزودی فعال می‌شود")
 
 # --- Flask Webhook ---
 @app.route('/', methods=["POST"])
@@ -115,7 +117,6 @@ def index():
     return "ربات فعال است."
 
 if __name__ == '__main__':
-    import telebot
     bot.remove_webhook()
     bot.set_webhook(url='https://hozhin.onrender.com')
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
