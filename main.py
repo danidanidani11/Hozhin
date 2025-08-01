@@ -4,7 +4,7 @@ import telebot
 from telebot import types
 
 TOKEN = '7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0'
-ADMIN_ID = 1383555301
+ADMIN_ID = 5542927340
 CHANNEL_USERNAME = 'fromheartsoul'
 PDF_PATH = 'books/hozhin_harman.pdf'
 
