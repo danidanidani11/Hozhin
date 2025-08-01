@@ -4,7 +4,7 @@ import telebot
 from telebot import types
 
 TOKEN = '7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0'
-ADMIN_ID = 5542927340
+ADMIN_ID = 1383555301
 CHANNEL_USERNAME = 'fromheartsoul'
 PDF_PATH = 'books/hozhin_harman.pdf'
 
@@ -12,7 +12,7 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 user_state = {}
-feedback_threads = {}  # برای ذخیره پیام‌های مکالمه
+active_chats = {}  # برای ذخیره چت‌های فعال بین ادمین و کاربر
 
 # --- توابع جدید برای عضویت اجباری ---
 def check_membership(user_id):
@@ -51,7 +51,7 @@ def get_back_keyboard():
 
 def get_reply_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("پاسخ", "🔙 بازگشت به منو")
+    markup.add("🔙 بازگشت به منو", "✉️ پاسخ")
     return markup
 
 # --- استارت با بررسی عضویت ---
@@ -110,6 +110,8 @@ def buy_book(message):
 def back_to_menu(message):
     if message.chat.id in user_state:
         user_state.pop(message.chat.id)
+    if message.chat.id in active_chats:
+        active_chats.pop(message.chat.id)
     bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=get_main_keyboard())
 
 @bot.message_handler(content_types=['text', 'photo'], func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_receipt')
@@ -168,48 +170,99 @@ def suggestions(message):
 @bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_feedback')
 def receive_feedback(message):
     user_state.pop(message.chat.id)
-    feedback_id = len(feedback_threads) + 1
-    feedback_threads[feedback_id] = {'user_id': message.from_user.id, 'messages': [message.text]}
+    active_chats[message.chat.id] = True  # شروع چت
     
-    # دکمه پاسخ برای ادمین
+    # ارسال پیام به ادمین با دکمه پاسخ
     markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("پاسخ", callback_data=f"reply_{feedback_id}")
-    )
-    bot.send_message(ADMIN_ID, f"📩 پیام از {message.from_user.id}:\n\n{message.text}", reply_markup=markup)
-    bot.send_message(message.chat.id, "✅ پیام شما ارسال شد. ممنون از همراهی‌تان.", reply_markup=get_main_keyboard())
-
-# --- پاسخ ادمین به پیام کاربر ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("reply_"))
-def handle_admin_reply(call):
-    feedback_id = int(call.data.split("_")[1])
-    if feedback_id not in feedback_threads:
-        bot.answer_callback_query(call.id, "❌ این پیام دیگر معتبر نیست.", show_alert=True)
-        return
+    markup.add(types.InlineKeyboardButton("✉️ پاسخ", callback_data=f"reply_{message.chat.id}"))
     
-    user_state[call.from_user.id] = f'replying_to_{feedback_id}'
-    bot.send_message(ADMIN_ID, "لطفاً پاسخ خود را بنویسید:", reply_markup=get_back_keyboard())
+    bot.send_message(
+        ADMIN_ID, 
+        f"📩 پیام جدید از کاربر {message.from_user.id}:\n\n{message.text}",
+        reply_markup=markup
+    )
+    
+    bot.send_message(
+        message.chat.id, 
+        "✅ پیام شما ارسال شد. در صورت نیاز به پاسخ، ادمین به شما پیام خواهد داد.",
+        reply_markup=get_reply_keyboard()
+    )
+
+# --- هندلر پاسخ ادمین ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("reply_"))
+def admin_reply_handler(call):
+    user_id = int(call.data.split("_")[1])
+    active_chats[user_id] = True  # فعال کردن چت
+    user_state[user_id] = 'admin_reply'  # حالت پاسخ ادمین
+    
+    bot.send_message(
+        ADMIN_ID,
+        f"لطفا پاسخ خود را برای کاربر {user_id} ارسال کنید:",
+        reply_markup=get_back_keyboard()
+    )
     bot.answer_callback_query(call.id)
 
-@bot.message_handler(func=lambda msg: user_state.get(msg.chat.id, '').startswith('replying_to_'))
-def receive_admin_response(message):
-    feedback_id = int(user_state[message.chat.id].split("_")[1])
-    user_state.pop(message.chat.id)
+# --- دریافت پاسخ ادمین و ارسال به کاربر ---
+@bot.message_handler(func=lambda msg: msg.from_user.id == ADMIN_ID and any(user_id for user_id, state in user_state.items() if state == 'admin_reply'))
+def send_admin_reply(message):
+    # پیدا کردن کاربری که در حال پاسخ به او هستیم
+    target_user_id = next(user_id for user_id, state in user_state.items() if state == 'admin_reply')
     
-    if feedback_id not in feedback_threads:
-        bot.send_message(ADMIN_ID, "❌ این پیام دیگر معتبر نیست.", reply_markup=get_main_keyboard())
+    if message.text == "🔙 بازگشت به منو":
+        user_state.pop(target_user_id)
+        bot.send_message(ADMIN_ID, "پاسخ دادن لغو شد.", reply_markup=get_main_keyboard())
         return
     
-    user_id = feedback_threads[feedback_id]['user_id']
-    feedback_threads[feedback_id]['messages'].append(f"ادمین: {message.text}")
-    
-    # دکمه پاسخ برای کاربر
-    markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("پاسخ", callback_data=f"reply_{feedback_id}")
+    # ارسال پاسخ به کاربر
+    bot.send_message(
+        target_user_id,
+        f"📩 پاسخ از ادمین:\n\n{message.text}",
+        reply_markup=get_reply_keyboard()
     )
-    bot.send_message(user_id, f"📬 پاسخ ادمین:\n\n{message.text}", reply_markup=markup)
-    bot.send_message(ADMIN_ID, "✅ پاسخ شما برای کاربر ارسال شد.", reply_markup=get_main_keyboard())
+    
+    bot.send_message(
+        ADMIN_ID,
+        f"✅ پاسخ شما برای کاربر {target_user_id} ارسال شد.",
+        reply_markup=get_main_keyboard()
+    )
+    
+    user_state.pop(target_user_id)
+    active_chats[target_user_id] = True  # چت همچنان فعال می‌ماند
+
+# --- دریافت پاسخ کاربر به ادمین ---
+@bot.message_handler(func=lambda msg: msg.chat.id in active_chats and msg.text == "✉️ پاسخ")
+def user_reply_handler(message):
+    user_state[message.chat.id] = 'user_reply'
+    bot.send_message(
+        message.chat.id,
+        "لطفا پیام خود را برای ادمین ارسال کنید:",
+        reply_markup=get_back_keyboard()
+    )
+
+@bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'user_reply')
+def send_user_reply(message):
+    if message.text == "🔙 بازگشت به منو":
+        user_state.pop(message.chat.id)
+        bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=get_main_keyboard())
+        return
+    
+    # ارسال پیام کاربر به ادمین
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("✉️ پاسخ", callback_data=f"reply_{message.chat.id}"))
+    
+    bot.send_message(
+        ADMIN_ID,
+        f"📩 پاسخ از کاربر {message.from_user.id}:\n\n{message.text}",
+        reply_markup=markup
+    )
+    
+    bot.send_message(
+        message.chat.id,
+        "✅ پاسخ شما برای ادمین ارسال شد.",
+        reply_markup=get_reply_keyboard()
+    )
+    
+    user_state.pop(message.chat.id)
 
 # --- درباره کتاب با بررسی عضویت ---
 @bot.message_handler(func=lambda msg: msg.text == "ℹ️ درباره کتاب")
@@ -257,36 +310,6 @@ def audio_book(message):
         return
     
     bot.send_message(message.chat.id, "این بخش بزودی فعال می‌شود")
-
-# --- پاسخ کاربر به پیام ادمین ---
-@bot.message_handler(func=lambda msg: msg.text == "پاسخ")
-def user_reply(message):
-    for feedback_id, thread in feedback_threads.items():
-        if thread['user_id'] == message.from_user.id:
-            user_state[message.chat.id] = f'replying_to_{feedback_id}'
-            bot.send_message(message.chat.id, "لطفاً پاسخ خود را بنویسید:", reply_markup=get_back_keyboard())
-            return
-    bot.send_message(message.chat.id, "❌ هیچ مکالمه فعالی برای پاسخ وجود ندارد.", reply_markup=get_main_keyboard())
-
-# --- دریافت پاسخ کاربر ---
-@bot.message_handler(func=lambda msg: user_state.get(msg.chat.id, '').startswith('replying_to_'))
-def receive_user_response(message):
-    feedback_id = int(user_state[message.chat.id].split("_")[1])
-    user_state.pop(message.chat.id)
-    
-    if feedback_id not in feedback_threads:
-        bot.send_message(message.chat.id, "❌ این پیام دیگر معتبر نیست.", reply_markup=get_main_keyboard())
-        return
-    
-    feedback_threads[feedback_id]['messages'].append(f"کاربر: {message.text}")
-    
-    # دکمه پاسخ برای ادمین
-    markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("پاسخ", callback_data=f"reply_{feedback_id}")
-    )
-    bot.send_message(ADMIN_ID, f"📩 پاسخ کاربر {message.from_user.id}:\n\n{message.text}", reply_markup=markup)
-    bot.send_message(message.chat.id, "✅ پاسخ شما برای ادمین ارسال شد.", reply_markup=get_reply_keyboard())
 
 # --- Fallback handler for debugging ---
 @bot.message_handler(content_types=['text'])
