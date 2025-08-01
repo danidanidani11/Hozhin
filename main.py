@@ -4,7 +4,7 @@ import telebot
 from telebot import types
 
 TOKEN = '7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0'
-ADMIN_ID = 5542927340
+ADMIN_ID = 1383555301
 CHANNEL_USERNAME = 'fromheartsoul'
 PDF_PATH = 'books/hozhin_harman.pdf'
 
@@ -53,20 +53,6 @@ def get_reply_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🔙 بازگشت به منو", "✉️ پاسخ")
     return markup
-
-def get_hamburger_menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add("📜 /start")
-    return markup
-
-# --- نمایش منوی همبرگری ---
-@bot.message_handler(commands=['menu'])
-def show_hamburger_menu(message):
-    bot.send_message(
-        message.chat.id,
-        "منوی اصلی:",
-        reply_markup=get_hamburger_menu()
-    )
 
 # --- استارت با بررسی عضویت ---
 @bot.message_handler(commands=['start'])
