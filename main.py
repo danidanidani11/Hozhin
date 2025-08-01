@@ -4,7 +4,7 @@ import telebot
 from telebot import types
 
 TOKEN = '7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0'
-ADMIN_ID = 5542927340
+ADMIN_ID = 1383555301
 CHANNEL_USERNAME = 'fromheartsoul'
 PDF_PATH = 'books/hozhin_harman.pdf'
 
@@ -12,7 +12,7 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 user_state = {}
-active_chats = {}  # برای ذخیره چت‌های فعال بین ادمین و کاربر
+conversations = {}  # ذخیره مکالمات بین کاربر و ادمین
 
 # --- توابع جدید برای عضویت اجباری ---
 def check_membership(user_id):
@@ -49,9 +49,9 @@ def get_back_keyboard():
     markup.add("🔙 بازگشت به منو")
     return markup
 
-def get_reply_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🔙 بازگشت به منو", "✉️ پاسخ")
+def get_reply_keyboard(user_id):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("✍️ پاسخ", callback_data=f"reply_{user_id}"))
     return markup
 
 # --- استارت با بررسی عضویت ---
@@ -110,8 +110,6 @@ def buy_book(message):
 def back_to_menu(message):
     if message.chat.id in user_state:
         user_state.pop(message.chat.id)
-    if message.chat.id in active_chats:
-        active_chats.pop(message.chat.id)
     bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=get_main_keyboard())
 
 @bot.message_handler(content_types=['text', 'photo'], func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_receipt')
@@ -170,99 +168,114 @@ def suggestions(message):
 @bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_feedback')
 def receive_feedback(message):
     user_state.pop(message.chat.id)
-    active_chats[message.chat.id] = True  # شروع چت
-    
-    # ارسال پیام به ادمین با دکمه پاسخ
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("✉️ پاسخ", callback_data=f"reply_{message.chat.id}"))
-    
-    bot.send_message(
+    feedback_msg = bot.send_message(
         ADMIN_ID, 
         f"📩 پیام جدید از کاربر {message.from_user.id}:\n\n{message.text}",
-        reply_markup=markup
+        reply_markup=get_reply_keyboard(message.from_user.id)
     )
+    
+    # ذخیره اطلاعات مکالمه
+    conversations[message.from_user.id] = {
+        'last_admin_msg_id': feedback_msg.message_id,
+        'last_user_msg_id': message.message_id
+    }
     
     bot.send_message(
         message.chat.id, 
-        "✅ پیام شما ارسال شد. در صورت نیاز به پاسخ، ادمین به شما پیام خواهد داد.",
-        reply_markup=get_reply_keyboard()
+        "✅ پیام شما ارسال شد. ممنون از همراهی‌تان.", 
+        reply_markup=get_main_keyboard()
     )
 
-# --- هندلر پاسخ ادمین ---
+# --- مدیریت پاسخ ادمین به کاربر ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("reply_"))
-def admin_reply_handler(call):
+def handle_admin_reply(call):
     user_id = int(call.data.split("_")[1])
-    active_chats[user_id] = True  # فعال کردن چت
-    user_state[user_id] = 'admin_reply'  # حالت پاسخ ادمین
+    bot.answer_callback_query(call.id)
     
+    # تنظیم وضعیت برای پاسخ ادمین
+    user_state[call.from_user.id] = f'admin_reply_{user_id}'
     bot.send_message(
         ADMIN_ID,
         f"لطفا پاسخ خود را برای کاربر {user_id} ارسال کنید:",
-        reply_markup=get_back_keyboard()
+        reply_markup=types.ForceReply(selective=True)
     )
-    bot.answer_callback_query(call.id)
 
 # --- دریافت پاسخ ادمین و ارسال به کاربر ---
-@bot.message_handler(func=lambda msg: msg.from_user.id == ADMIN_ID and any(user_id for user_id, state in user_state.items() if state == 'admin_reply'))
+@bot.message_handler(func=lambda msg: msg.from_user.id == ADMIN_ID and msg.reply_to_message and 'لطفا پاسخ خود را برای کاربر' in msg.reply_to_message.text)
 def send_admin_reply(message):
-    # پیدا کردن کاربری که در حال پاسخ به او هستیم
-    target_user_id = next(user_id for user_id, state in user_state.items() if state == 'admin_reply')
+    try:
+        # استخراج شناسه کاربر از پیام
+        user_id = int(message.reply_to_message.text.split()[-1])
+        
+        # ارسال پاسخ به کاربر
+        bot.send_message(
+            user_id,
+            f"📩 پاسخ ادمین به پیام شما:\n\n{message.text}",
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton("✍️ پاسخ", callback_data="reply_to_admin")
+            )
+        )
+        
+        # ذخیره اطلاعات مکالمه
+        if user_id not in conversations:
+            conversations[user_id] = {}
+            
+        conversations[user_id]['last_admin_msg_id'] = message.message_id
+        
+        bot.send_message(
+            ADMIN_ID,
+            f"✅ پاسخ شما برای کاربر {user_id} ارسال شد."
+        )
+        
+        # حذف وضعیت پاسخ
+        if f'admin_reply_{user_id}' in user_state.values():
+            for key, value in list(user_state.items()):
+                if value == f'admin_reply_{user_id}':
+                    user_state.pop(key)
+                    break
+                    
+    except Exception as e:
+        bot.send_message(ADMIN_ID, f"خطا در ارسال پاسخ: {e}")
+
+# --- مدیریت پاسخ کاربر به ادمین ---
+@bot.callback_query_handler(func=lambda call: call.data == "reply_to_admin")
+def handle_user_reply(call):
+    user_id = call.from_user.id
+    bot.answer_callback_query(call.id)
     
-    if message.text == "🔙 بازگشت به منو":
-        user_state.pop(target_user_id)
-        bot.send_message(ADMIN_ID, "پاسخ دادن لغو شد.", reply_markup=get_main_keyboard())
-        return
+    # تنظیم وضعیت برای پاسخ کاربر
+    user_state[user_id] = 'user_reply_to_admin'
     
-    # ارسال پاسخ به کاربر
     bot.send_message(
-        target_user_id,
-        f"📩 پاسخ از ادمین:\n\n{message.text}",
-        reply_markup=get_reply_keyboard()
+        user_id,
+        "لطفا پاسخ خود را ارسال کنید:",
+        reply_markup=types.ForceReply(selective=True)
     )
+
+# --- دریافت پاسخ کاربر و ارسال به ادمین ---
+@bot.message_handler(func=lambda msg: msg.from_user.id in user_state and user_state[msg.from_user.id] == 'user_reply_to_admin')
+def send_user_reply(message):
+    user_id = message.from_user.id
+    user_state.pop(user_id)
     
+    # ارسال پاسخ به ادمین
     bot.send_message(
         ADMIN_ID,
-        f"✅ پاسخ شما برای کاربر {target_user_id} ارسال شد.",
+        f"📩 پاسخ کاربر {user_id}:\n\n{message.text}",
+        reply_markup=get_reply_keyboard(user_id)
+    )
+    
+    # ذخیره اطلاعات مکالمه
+    if user_id not in conversations:
+        conversations[user_id] = {}
+        
+    conversations[user_id]['last_user_msg_id'] = message.message_id
+    
+    bot.send_message(
+        user_id,
+        "✅ پاسخ شما ارسال شد.",
         reply_markup=get_main_keyboard()
     )
-    
-    user_state.pop(target_user_id)
-    active_chats[target_user_id] = True  # چت همچنان فعال می‌ماند
-
-# --- دریافت پاسخ کاربر به ادمین ---
-@bot.message_handler(func=lambda msg: msg.chat.id in active_chats and msg.text == "✉️ پاسخ")
-def user_reply_handler(message):
-    user_state[message.chat.id] = 'user_reply'
-    bot.send_message(
-        message.chat.id,
-        "لطفا پیام خود را برای ادمین ارسال کنید:",
-        reply_markup=get_back_keyboard()
-    )
-
-@bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'user_reply')
-def send_user_reply(message):
-    if message.text == "🔙 بازگشت به منو":
-        user_state.pop(message.chat.id)
-        bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=get_main_keyboard())
-        return
-    
-    # ارسال پیام کاربر به ادمین
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("✉️ پاسخ", callback_data=f"reply_{message.chat.id}"))
-    
-    bot.send_message(
-        ADMIN_ID,
-        f"📩 پاسخ از کاربر {message.from_user.id}:\n\n{message.text}",
-        reply_markup=markup
-    )
-    
-    bot.send_message(
-        message.chat.id,
-        "✅ پاسخ شما برای ادمین ارسال شد.",
-        reply_markup=get_reply_keyboard()
-    )
-    
-    user_state.pop(message.chat.id)
 
 # --- درباره کتاب با بررسی عضویت ---
 @bot.message_handler(func=lambda msg: msg.text == "ℹ️ درباره کتاب")
