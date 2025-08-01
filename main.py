@@ -4,7 +4,7 @@ import telebot
 from telebot import types
 
 TOKEN = '7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0'
-ADMIN_ID = 1383555301
+ADMIN_ID = 5542927340
 CHANNEL_USERNAME = 'fromheartsoul'
 PDF_PATH = 'books/hozhin_harman.pdf'
 
@@ -161,9 +161,38 @@ def suggestions(message):
 
 @bot.message_handler(func=lambda msg: user_state.get(msg.chat.id) == 'awaiting_feedback')
 def receive_feedback(message):
-    user_state.pop(message.chat.id)
-    bot.send_message(ADMIN_ID, f"📩 پیام از {message.from_user.id}:\n\n{message.text}")
+    user_id = message.from_user.id
+    # دکمه پاسخ برای ادمین
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("پاسخ", callback_data=f"reply_{user_id}")
+    )
+    bot.send_message(ADMIN_ID, f"📩 پیام از {user_id}:\n\n{message.text}", reply_markup=markup)
     bot.send_message(message.chat.id, "✅ پیام شما ارسال شد. ممنون از همراهی‌تان.", reply_markup=get_main_keyboard())
+    user_state.pop(message.chat.id)
+
+# --- پاسخ ادمین به کاربر ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("reply_"))
+def handle_reply(call):
+    user_id = int(call.data.split("_")[1])
+    user_state[call.from_user.id] = f'replying_to_{user_id}'
+    bot.send_message(ADMIN_ID, f"لطفاً پاسخ خود را برای کاربر {user_id} بنویسید:")
+    bot.answer_callback_query(call.id)
+
+@bot.message_handler(func=lambda msg: user_state.get(msg.chat.id, '').startswith('replying_to_'))
+def send_reply_to_user(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    user_id = int(user_state[message.chat.id].split('_')[2])
+    bot.send_message(user_id, f"📬 پاسخ ادمین:\n\n{message.text}")
+    bot.send_message(ADMIN_ID, f"✅ پاسخ شما به کاربر {user_id} ارسال شد.")
+    user_state.pop(message.chat.id)
+    # دکمه پاسخ برای کاربر
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("پاسخ", callback_data=f"reply_{user_id}")
+    )
+    bot.send_message(user_id, "اگر مایل به ادامه مکالمه هستید، روی دکمه پاسخ کلیک کنید.", reply_markup=markup)
 
 # --- درباره کتاب با بررسی عضویت ---
 @bot.message_handler(func=lambda msg: msg.text == "ℹ️ درباره کتاب")
