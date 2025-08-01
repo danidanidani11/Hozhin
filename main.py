@@ -4,7 +4,7 @@ import telebot
 from telebot import types
 
 TOKEN = '7954708829:AAFg7Mwj5-iGwIsUmfDRr6ZRJZr2jZ28jz0'
-ADMIN_ID = 5542927340
+ADMIN_ID = 1383555301
 CHANNEL_USERNAME = 'fromheartsoul'
 PDF_PATH = 'books/hozhin_harman.pdf'
 
@@ -54,7 +54,7 @@ def get_reply_keyboard():
     markup.add("🔙 بازگشت به منو", "✉️ پاسخ")
     return markup
 
-# --- استارت با بررسی عضویت ---
+# --- استارت با بررسی عضویت و منوی همبرگری ---
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     if not check_membership(message.from_user.id):
@@ -65,10 +65,17 @@ def start_handler(message):
         )
         return
     
+    # اضافه کردن منوی همبرگری
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("≡ Menu"))
+    markup.add("📖 خرید کتاب", "🗣️ انتقادات و پیشنهادات")
+    markup.add("ℹ️ درباره کتاب", "✍️ درباره نویسنده")
+    markup.add("🔊 کتاب صوتی (بزودی)")
+    
     bot.send_message(
         message.chat.id,
         "به ربات فروش کتاب «هوژین و حرمان» خوش آمدید 🌸",
-        reply_markup=get_main_keyboard()
+        reply_markup=markup
     )
 
 # --- هندلر بررسی عضویت ---
